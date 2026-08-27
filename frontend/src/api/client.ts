@@ -71,6 +71,13 @@ export interface Attendance {
   shiftAssignment?: {
     shift: Shift;
   } | null;
+  correctedById?: number | null;
+  correctedBy?: {
+    id: number;
+    email: string;
+    role: string;
+  } | null;
+  correctedAt?: string | null;
 }
 
 export interface AuthUser {
@@ -349,6 +356,26 @@ export const api = {
   }) =>
     request<{ message: string; data: Attendance }>('/attendance', {
       method: 'POST',
+      body: JSON.stringify(data),
+    }),
+  checkoutAttendance: (data: {
+    employeeId?: number;
+    checkOut?: string | null;
+  }) =>
+    request<{ message: string; data: Attendance }>('/attendance/checkout', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  correctAttendance: (
+    id: number,
+    data: {
+      checkIn?: string | null;
+      checkOut?: string | null;
+      status?: string | null;
+    }
+  ) =>
+    request<{ message: string; data: Attendance }>(`/attendance/${id}/correct`, {
+      method: 'PATCH',
       body: JSON.stringify(data),
     }),
   deleteAttendance: (id: number) =>

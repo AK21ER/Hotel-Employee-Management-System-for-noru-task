@@ -42,12 +42,65 @@ export const recordAttendanceSchema = z
     }
   );
 
+export const checkoutAttendanceSchema = z.object({
+  employeeId: z.number().int().positive().optional(),
+  checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
+});
+
+export const correctAttendanceSchema = z
+  .object({
+    checkIn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
+    checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
+    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']).optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      if (data.checkIn && data.checkOut) {
+        const inTime = new Date(data.checkIn).getTime();
+        const outTime = new Date(data.checkOut).getTime();
+        return outTime > inTime;
+      }
+      return true;
+    },
+    {
+      message: 'checkOut time must be later than checkIn time',
+      path: ['checkOut'],
+    }
+  );
+
 export class AttendanceController {
   static async recordAttendance(req: Request, res: Response, next: NextFunction) {
     try {
       const attendance = await AttendanceService.recordAttendance(req.body, req.user);
       res.status(201).json({
         message: 'Attendance recorded successfully',
+        data: attendance,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async checkout(req: Request, res: Response, next: NextFunction) {
+    try {
+      const attendance = await AttendanceService.checkout(req.body, req.user);
+      res.status(200).json({
+        message: 'Check-out recorded successfully',
+        data: attendance,
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async correct(req: Request, res: Response, next: NextFunction) {
+    try {
+      const id = Number(req.params.id);
+      if (isNaN(id)) throw new AppError('Invalid ID format', 400);
+
+      const attendance = await AttendanceService.correctAttendance(id, req.body, req.user);
+      res.status(200).json({
+        message: 'Attendance record corrected successfully',
         data: attendance,
       });
     } catch (error) {
@@ -98,9 +151,7 @@ export class AttendanceController {
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
       await AttendanceService.deleteAttendance(id, req.user);
-      res.status(200).json({
-        message: 'Attendance record deleted successfully',
-      });
+      res.status(200).json({ message: 'Attendance record deleted successfully' });
     } catch (error) {
       next(error);
     }

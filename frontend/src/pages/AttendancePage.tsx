@@ -13,6 +13,8 @@ import {
   CheckCircle2,
   Sparkles,
   Search,
+  Edit3,
+  Trash2,
 } from 'lucide-react';
 
 export const AttendancePage: React.FC = () => {
@@ -48,6 +50,17 @@ export const AttendancePage: React.FC = () => {
     includeCheckIn: true,
     includeCheckOut: false,
     explicitStatus: '',
+  });
+
+  // Correction Modal (Admin/Manager only)
+  const [isCorrectModalOpen, setIsCorrectModalOpen] = useState(false);
+  const [correctingRecord, setCorrectingRecord] = useState<Attendance | null>(null);
+  const [correctForm, setCorrectForm] = useState({
+    checkInTime: '',
+    checkOutTime: '',
+    includeCheckIn: true,
+    includeCheckOut: true,
+    status: 'PRESENT',
   });
 
   const fetchData = async () => {
@@ -100,6 +113,20 @@ export const AttendancePage: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const handleOpenCorrect = (att: Attendance) => {
+    setCorrectingRecord(att);
+    const inTime = att.checkIn ? new Date(att.checkIn).toTimeString().slice(0, 5) : '07:00';
+    const outTime = att.checkOut ? new Date(att.checkOut).toTimeString().slice(0, 5) : '15:00';
+    setCorrectForm({
+      checkInTime: inTime,
+      checkOutTime: outTime,
+      includeCheckIn: !!att.checkIn,
+      includeCheckOut: !!att.checkOut,
+      status: att.status,
+    });
+    setIsCorrectModalOpen(true);
+  };
+
   const handleRecordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -115,20 +142,75 @@ export const AttendancePage: React.FC = () => {
 
       const targetEmpId = isStaff ? (user?.employeeId || 0) : Number(recordForm.employeeId);
 
-      const res = await api.recordAttendance({
-        employeeId: targetEmpId,
-        date: recordForm.date,
-        checkIn: checkInIso,
-        checkOut: checkOutIso,
-        status: isStaff ? null : (recordForm.explicitStatus || null),
-      });
+      if (isStaff && recordForm.includeCheckOut && !recordForm.includeCheckIn) {
+        // Staff Clock Out endpoint
+        const res = await api.checkoutAttendance({
+          checkOut: checkOutIso,
+        });
+        const msg = `Clock-out recorded for ${res.data.employee.firstName} ${res.data.employee.lastName}`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Checked Out');
+      } else {
+        // Standard Check-In endpoint
+        const res = await api.recordAttendance({
+          employeeId: targetEmpId,
+          date: recordForm.date,
+          checkIn: checkInIso,
+          checkOut: checkOutIso,
+          status: isStaff ? null : (recordForm.explicitStatus || null),
+        });
 
-      const msg = `Attendance logged for ${res.data.employee.firstName} ${res.data.employee.lastName} (Status: ${res.data.status})`;
-      setSuccessMsg(msg);
-      toast.success(msg, 'Attendance Recorded');
+        const msg = `Attendance logged for ${res.data.employee.firstName} ${res.data.employee.lastName} (Status: ${res.data.status})`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Attendance Recorded');
+      }
+
       setIsModalOpen(false);
       fetchData();
       setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleCorrectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!correctingRecord) return;
+    try {
+      const recDate = correctingRecord.date.split('T')[0];
+      const checkInIso = correctForm.includeCheckIn && correctForm.checkInTime
+        ? `${recDate}T${correctForm.checkInTime}:00`
+        : null;
+      const checkOutIso = correctForm.includeCheckOut && correctForm.checkOutTime
+        ? `${recDate}T${correctForm.checkOutTime}:00`
+        : null;
+
+      await api.correctAttendance(correctingRecord.id, {
+        checkIn: checkInIso,
+        checkOut: checkOutIso,
+        status: correctForm.status,
+      });
+
+      const msg = `Attendance record #${correctingRecord.id} corrected with audit timestamp.`;
+      setSuccessMsg(msg);
+      toast.success(msg, 'Record Corrected');
+      setIsCorrectModalOpen(false);
+      fetchData();
+      setTimeout(() => setSuccessMsg(null), 5000);
+    } catch (err: any) {
+      setError(err.message);
+    }
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Delete this attendance record?')) return;
+    try {
+      await api.deleteAttendance(id);
+      const msg = 'Attendance record deleted.';
+      setSuccessMsg(msg);
+      toast.info(msg, 'Record Deleted');
+      fetchData();
+      setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
       setError(err.message);
     }
@@ -296,7 +378,8 @@ export const AttendancePage: React.FC = () => {
                   <th className="py-3.5 px-6">Department</th>
                   <th className="py-3.5 px-6">Assigned Shift</th>
                   <th className="py-3.5 px-6">Check In / Out</th>
-                  <th className="py-3.5 px-6">Derived Status</th>
+                  <th className="py-3.5 px-6">Status & Audit</th>
+                  {!isStaff && <th className="py-3.5 px-6 text-right">Actions</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 text-sm">
@@ -339,8 +422,38 @@ export const AttendancePage: React.FC = () => {
                         </div>
                       </td>
                       <td className="py-4 px-6">
-                        <Badge status={att.status} />
+                        <div className="flex flex-col space-y-1">
+                          <Badge status={att.status} />
+                          {att.correctedAt && (
+                            <span
+                              className="inline-flex items-center text-[10px] text-amber-800 bg-amber-50 px-1.5 py-0.5 rounded border border-amber-200 font-semibold"
+                              title={`Corrected on ${new Date(att.correctedAt).toLocaleString()} by ${att.correctedBy?.email || 'Admin'}`}
+                            >
+                              ✏️ Edited by {att.correctedBy?.email?.split('@')[0] || 'Admin'}
+                            </span>
+                          )}
+                        </div>
                       </td>
+                      {!isStaff && (
+                        <td className="py-4 px-6 text-right">
+                          <div className="flex items-center justify-end space-x-1">
+                            <button
+                              onClick={() => handleOpenCorrect(att)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-[#c29b38] hover:bg-[#f9f5ea] transition"
+                              title="Administrative correction"
+                            >
+                              <Edit3 className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDelete(att.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition"
+                              title="Delete attendance record"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -558,6 +671,99 @@ export const AttendancePage: React.FC = () => {
           </div>
         </form>
       </Modal>
+
+      {/* Administrative Correction Modal (Admin / Manager Only) */}
+      {correctingRecord && (
+        <Modal
+          isOpen={isCorrectModalOpen}
+          onClose={() => setIsCorrectModalOpen(false)}
+          title={`Administrative Correction — #${correctingRecord.id}`}
+        >
+          <form onSubmit={handleCorrectSubmit} className="space-y-4">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 space-y-1">
+              <div className="font-bold">⚠️ Audit-Logged Administrative Correction</div>
+              <p>
+                Modifying record for <strong>{correctingRecord.employee.firstName} {correctingRecord.employee.lastName}</strong> on{' '}
+                <strong>{new Date(correctingRecord.date).toLocaleDateString()}</strong>. Your User ID and timestamp will be permanently attached for auditing.
+              </p>
+            </div>
+
+            <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3">
+              <div className="flex items-center justify-between">
+                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={correctForm.includeCheckIn}
+                    onChange={(e) => setCorrectForm({ ...correctForm, includeCheckIn: e.target.checked })}
+                    className="rounded text-[#c29b38] focus:ring-[#c29b38]"
+                  />
+                  <span>Check-In Timestamp</span>
+                </label>
+                {correctForm.includeCheckIn && (
+                  <input
+                    type="time"
+                    value={correctForm.checkInTime}
+                    onChange={(e) => setCorrectForm({ ...correctForm, checkInTime: e.target.value })}
+                    className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
+                  />
+                )}
+              </div>
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={correctForm.includeCheckOut}
+                    onChange={(e) => setCorrectForm({ ...correctForm, includeCheckOut: e.target.checked })}
+                    className="rounded text-[#c29b38] focus:ring-[#c29b38]"
+                  />
+                  <span>Check-Out Timestamp</span>
+                </label>
+                {correctForm.includeCheckOut && (
+                  <input
+                    type="time"
+                    value={correctForm.checkOutTime}
+                    onChange={(e) => setCorrectForm({ ...correctForm, checkOutTime: e.target.value })}
+                    className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
+                  />
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Attendance Status *
+              </label>
+              <select
+                value={correctForm.status}
+                onChange={(e) => setCorrectForm({ ...correctForm, status: e.target.value })}
+                className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+              >
+                <option value="PRESENT">PRESENT</option>
+                <option value="LATE">LATE</option>
+                <option value="ABSENT">ABSENT</option>
+                <option value="ON_LEAVE">ON LEAVE</option>
+              </select>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-4 border-t border-[#ecdcb7]/60">
+              <button
+                type="button"
+                onClick={() => setIsCorrectModalOpen(false)}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 rounded-xl text-sm font-bold bg-amber-600 hover:bg-amber-700 text-white shadow-md transition"
+              >
+                Save Correction & Audit Log
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
     </div>
   );
 };

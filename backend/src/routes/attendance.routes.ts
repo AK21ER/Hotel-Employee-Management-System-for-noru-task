@@ -2,6 +2,8 @@ import { Router } from 'express';
 import {
   AttendanceController,
   recordAttendanceSchema,
+  checkoutAttendanceSchema,
+  correctAttendanceSchema,
 } from '../controllers/attendance.controller.js';
 import { validateRequest } from '../middleware/validate.js';
 import { requireAuth, requireRole } from '../middleware/auth.js';
@@ -101,6 +103,10 @@ router.get('/', AttendanceController.getAll);
  *         description: Validation error
  */
 router.post('/', validateRequest({ body: recordAttendanceSchema }), AttendanceController.recordAttendance);
+
+router.patch('/checkout', validateRequest({ body: checkoutAttendanceSchema }), AttendanceController.checkout);
+
+router.patch('/:id/correct', requireRole('ADMIN', 'MANAGER'), validateRequest({ body: correctAttendanceSchema }), AttendanceController.correct);
 
 /**
  * @swagger

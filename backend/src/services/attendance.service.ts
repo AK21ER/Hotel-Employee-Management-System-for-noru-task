@@ -77,7 +77,22 @@ export interface RecordAttendanceInput {
   status?: AttendanceStatus | null;
 }
 
+export interface CheckoutAttendanceInput {
+  employeeId?: number;
+  checkOut?: string | Date | null;
+}
+
+export interface CorrectAttendanceInput {
+  checkIn?: string | Date | null;
+  checkOut?: string | Date | null;
+  status?: AttendanceStatus | null;
+}
+
 export class AttendanceService {
+  /**
+   * POST /api/attendance (Check-In)
+   * Only ever creates a new record. If one already exists for (employeeId, date), rejects with 409 Conflict.
+   */
   static async recordAttendance(data: RecordAttendanceInput, actor?: AuthUserPayload) {
     // If actor is STAFF, server forces employeeId = req.user.employeeId, ignoring any client value
     let targetEmployeeId = data.employeeId;
@@ -122,6 +137,20 @@ export class AttendanceService {
       }
     }
 
+    // Rule 1: Check if an Attendance record already exists for (employeeId, normalizedDate)
+    const existing = await prisma.attendance.findUnique({
+      where: {
+        employeeId_date: {
+          employeeId: targetEmployeeId,
+          date: normalizedDate,
+        },
+      },
+    });
+
+    if (existing) {
+      throw new AppError('Already checked in for today — use check-out to complete your attendance record.', 409);
+    }
+
     // Find shift assignment for this employee on this date if any
     const assignment = await prisma.shiftAssignment.findUnique({
       where: {
@@ -145,27 +174,15 @@ export class AttendanceService {
     const checkInDate = data.checkIn ? new Date(data.checkIn) : null;
     const checkOutDate = data.checkOut ? new Date(data.checkOut) : null;
 
-    // Upsert attendance record
-    const attendance = await prisma.attendance.upsert({
-      where: {
-        employeeId_date: {
-          employeeId: targetEmployeeId,
-          date: normalizedDate,
-        },
-      },
-      create: {
+    // Create strictly new attendance record (never overwrite)
+    const attendance = await prisma.attendance.create({
+      data: {
         employeeId: targetEmployeeId,
         date: normalizedDate,
         status: finalStatus,
         checkIn: checkInDate,
         checkOut: checkOutDate,
         shiftAssignmentId: assignment ? assignment.id : null,
-      },
-      update: {
-        status: finalStatus,
-        checkIn: checkInDate,
-        checkOut: checkOutDate,
-        shiftAssignmentId: assignment ? assignment.id : undefined,
       },
       include: {
         employee: {
@@ -179,10 +196,149 @@ export class AttendanceService {
             shift: true,
           },
         },
+        correctedBy: {
+          select: {
+            id: true,
+            email: true,
+            role: true,
+          },
+        },
       },
     });
 
     return attendance;
+  }
+
+  /**
+   * PATCH /api/attendance/checkout
+   * Finds today's existing Attendance record for employeeId and sets checkOut only.
+   */
+  static async checkout(data: CheckoutAttendanceInput, actor?: AuthUserPayload) {
+    let targetEmployeeId = data.employeeId;
+    if (actor?.role === 'STAFF') {
+      if (!actor.employeeId) {
+        throw new AppError('No linked employee profile found for staff user', 400);
+      }
+      targetEmployeeId = actor.employeeId;
+    }
+
+    if (!targetEmployeeId) {
+      throw new AppError('employeeId is required for check-out', 400);
+    }
+
+    const employee = await prisma.employee.findUnique({
+      where: { id: targetEmployeeId },
+      select: { id: true, status: true, departmentId: true },
+    });
+
+    if (!employee) {
+      throw new AppError(`Employee with ID ${targetEmployeeId} not found`, 404);
+    }
+
+    if (actor?.role === 'MANAGER' && employee.departmentId !== actor.departmentId) {
+      throw new AppError('Managers can only check out employees in their own department', 403);
+    }
+
+    const today = toDateOnly(new Date());
+
+    const existing = await prisma.attendance.findUnique({
+      where: {
+        employeeId_date: {
+          employeeId: targetEmployeeId,
+          date: today,
+        },
+      },
+    });
+
+    if (!existing) {
+      throw new AppError("No active check-in found for today — you must check in before checking out.", 400);
+    }
+
+    if (existing.checkOut) {
+      throw new AppError("Already checked out for today — cannot check out twice.", 400);
+    }
+
+    const checkOutDate = data.checkOut ? new Date(data.checkOut) : new Date();
+
+    if (existing.checkIn && checkOutDate.getTime() <= existing.checkIn.getTime()) {
+      throw new AppError("Check-out time must be later than check-in time.", 400);
+    }
+
+    const updated = await prisma.attendance.update({
+      where: { id: existing.id },
+      data: {
+        checkOut: checkOutDate,
+      },
+      include: {
+        employee: {
+          include: { department: true, role: true },
+        },
+        shiftAssignment: {
+          include: { shift: true },
+        },
+        correctedBy: {
+          select: { id: true, email: true, role: true },
+        },
+      },
+    });
+
+    return updated;
+  }
+
+  /**
+   * PATCH /api/attendance/:id/correct
+   * Administrative correction endpoint restricted to ADMIN and MANAGER.
+   */
+  static async correctAttendance(id: number, data: CorrectAttendanceInput, actor?: AuthUserPayload) {
+    if (actor?.role === 'STAFF') {
+      throw new AppError('Staff members are not permitted to correct attendance records', 403);
+    }
+
+    const existing = await prisma.attendance.findUnique({
+      where: { id },
+      include: { employee: true },
+    });
+
+    if (!existing) {
+      throw new AppError(`Attendance record with ID ${id} not found`, 404);
+    }
+
+    if (actor?.role === 'MANAGER' && existing.employee.departmentId !== actor.departmentId) {
+      throw new AppError('Managers can only correct attendance records in their own department', 403);
+    }
+
+    const effectiveCheckIn = data.checkIn !== undefined ? (data.checkIn ? new Date(data.checkIn) : null) : existing.checkIn;
+    const effectiveCheckOut = data.checkOut !== undefined ? (data.checkOut ? new Date(data.checkOut) : null) : existing.checkOut;
+
+    if (effectiveCheckIn && effectiveCheckOut) {
+      if (effectiveCheckOut.getTime() <= effectiveCheckIn.getTime()) {
+        throw new AppError('Check-out time must be later than check-in time.', 400);
+      }
+    }
+
+    const updated = await prisma.attendance.update({
+      where: { id },
+      data: {
+        checkIn: effectiveCheckIn,
+        checkOut: effectiveCheckOut,
+        status: data.status !== undefined && data.status !== null ? data.status : existing.status,
+        correctedById: actor?.userId ?? null,
+        correctedAt: new Date(),
+      },
+      include: {
+        employee: {
+          include: { department: true, role: true },
+        },
+        shiftAssignment: {
+          include: { shift: true },
+        },
+        correctedBy: {
+          select: { id: true, email: true, role: true },
+        },
+      },
+    });
+
+    return updated;
   }
 
   static async getAttendanceList(

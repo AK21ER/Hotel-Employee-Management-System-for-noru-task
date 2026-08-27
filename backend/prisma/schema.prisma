@@ -53,15 +53,16 @@ model Employee {
 }
 
 model User {
-  id                 Int        @id @default(autoincrement())
-  email              String     @unique
-  passwordHash       String
-  role               UserRole   @default(STAFF)
-  mustChangePassword Boolean    @default(true)
-  employeeId         Int?       @unique
-  employee           Employee?  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
-  createdAt          DateTime   @default(now())
-  updatedAt          DateTime   @updatedAt
+  id                   Int          @id @default(autoincrement())
+  email                String       @unique
+  passwordHash         String
+  role                 UserRole     @default(STAFF)
+  mustChangePassword   Boolean      @default(true)
+  employeeId           Int?         @unique
+  employee             Employee?    @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  correctedAttendances Attendance[] @relation("AttendanceCorrections")
+  createdAt            DateTime     @default(now())
+  updatedAt            DateTime     @updatedAt
 
   @@index([email])
   @@index([role])
@@ -103,6 +104,9 @@ model Attendance {
   checkOut          DateTime?
   shiftAssignmentId Int?             @unique
   shiftAssignment   ShiftAssignment? @relation(fields: [shiftAssignmentId], references: [id])
+  correctedById     Int?
+  correctedBy       User?            @relation("AttendanceCorrections", fields: [correctedById], references: [id])
+  correctedAt       DateTime?
 
   @@unique([employeeId, date])
   @@index([employeeId])
