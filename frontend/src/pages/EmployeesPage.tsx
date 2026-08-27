@@ -6,7 +6,6 @@ import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
 import {
-  Users,
   UserPlus,
   Edit2,
   UserX,
@@ -31,11 +30,11 @@ export const EmployeesPage: React.FC = () => {
 
   // Filters & Pagination
   const [search, setSearch] = useState('');
-  const [departmentId, setDepartmentId] = useState<number | undefined>(() => {
+  const [deptFilter, setDeptFilter] = useState<number | undefined>(() => {
     return isManager ? (user?.departmentId || user?.employee?.departmentId || undefined) : undefined;
   });
-  const [roleId, setRoleId] = useState<number | undefined>();
-  const [status, setStatus] = useState<string>('ALL');
+  const [roleFilter, setRoleFilter] = useState<number | undefined>();
+  const [statusFilter, setStatusFilter] = useState<string>('');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
@@ -111,21 +110,6 @@ export const EmployeesPage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [search, deptFilter, roleFilter, statusFilter, page]);
-
-  const handleOpenAdd = () => {
-    setEditingEmployee(null);
-    setFormData({
-      firstName: '',
-      lastName: '',
-      email: '',
-      phone: '',
-      hireDate: new Date().toISOString().split('T')[0],
-      departmentId: departments[0]?.id || 0,
-      roleId: roles[0]?.id || 0,
-      status: 'ACTIVE',
-    });
-    setIsModalOpen(true);
-  };
 
   const handleOpenEdit = (emp: Employee) => {
     setEditingEmployee(emp);
