@@ -404,47 +404,105 @@ export const AttendancePage: React.FC = () => {
             />
           </div>
 
-          <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3">
-            <div className="flex items-center justify-between">
-              <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={recordForm.includeCheckIn}
-                  onChange={(e) => setRecordForm({ ...recordForm, includeCheckIn: e.target.checked })}
-                  className="rounded text-[#c29b38] focus:ring-[#c29b38]"
-                />
-                <span>Include Check-In Time</span>
-              </label>
-              {recordForm.includeCheckIn && (
-                <input
-                  type="time"
-                  value={recordForm.checkInTime}
-                  onChange={(e) => setRecordForm({ ...recordForm, checkInTime: e.target.value })}
-                  className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
-                />
-              )}
+          {/* Time input area */}
+          {isStaff ? (
+            <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3 text-center">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-[#876420]">
+                Live Time Clock
+              </div>
+              <div className="text-2xl font-black font-mono text-[#1d140d] tracking-widest bg-white py-2 rounded-lg border border-[#ecdcb7]">
+                {recordForm.checkInTime || new Date().toTimeString().slice(0, 5)}
+              </div>
+              <p className="text-[11px] text-slate-500">
+                Timestamp is automatically locked to the server/system clock upon punching.
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nowTime = new Date().toTimeString().slice(0, 5);
+                    setRecordForm({
+                      ...recordForm,
+                      includeCheckIn: true,
+                      includeCheckOut: false,
+                      checkInTime: nowTime,
+                    });
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
+                    recordForm.includeCheckIn && !recordForm.includeCheckOut
+                      ? 'bg-emerald-600 text-white border-emerald-600 shadow'
+                      : 'bg-white text-slate-700 border-[#ecdcb7] hover:bg-emerald-50'
+                  }`}
+                >
+                  ✓ Punch Check-In
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const nowTime = new Date().toTimeString().slice(0, 5);
+                    setRecordForm({
+                      ...recordForm,
+                      includeCheckIn: false,
+                      includeCheckOut: true,
+                      checkOutTime: nowTime,
+                    });
+                  }}
+                  className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
+                    recordForm.includeCheckOut
+                      ? 'bg-amber-600 text-white border-amber-600 shadow'
+                      : 'bg-white text-slate-700 border-[#ecdcb7] hover:bg-amber-50'
+                  }`}
+                >
+                  ⏰ Clock Out
+                </button>
+              </div>
             </div>
+          ) : (
+            <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
+                Manual Punch Time Entry (Management)
+              </div>
+              <div className="flex items-center justify-between">
+                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={recordForm.includeCheckIn}
+                    onChange={(e) => setRecordForm({ ...recordForm, includeCheckIn: e.target.checked })}
+                    className="rounded text-[#c29b38] focus:ring-[#c29b38]"
+                  />
+                  <span>Include Check-In Time</span>
+                </label>
+                {recordForm.includeCheckIn && (
+                  <input
+                    type="time"
+                    value={recordForm.checkInTime}
+                    onChange={(e) => setRecordForm({ ...recordForm, checkInTime: e.target.value })}
+                    className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
+                  />
+                )}
+              </div>
 
-            <div className="flex items-center justify-between">
-              <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={recordForm.includeCheckOut}
-                  onChange={(e) => setRecordForm({ ...recordForm, includeCheckOut: e.target.checked })}
-                  className="rounded text-[#c29b38] focus:ring-[#c29b38]"
-                />
-                <span>Include Check-Out Time</span>
-              </label>
-              {recordForm.includeCheckOut && (
-                <input
-                  type="time"
-                  value={recordForm.checkOutTime}
-                  onChange={(e) => setRecordForm({ ...recordForm, checkOutTime: e.target.value })}
-                  className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
-                />
-              )}
+              <div className="flex items-center justify-between">
+                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={recordForm.includeCheckOut}
+                    onChange={(e) => setRecordForm({ ...recordForm, includeCheckOut: e.target.checked })}
+                    className="rounded text-[#c29b38] focus:ring-[#c29b38]"
+                  />
+                  <span>Include Check-Out Time</span>
+                </label>
+                {recordForm.includeCheckOut && (
+                  <input
+                    type="time"
+                    value={recordForm.checkOutTime}
+                    onChange={(e) => setRecordForm({ ...recordForm, checkOutTime: e.target.value })}
+                    className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
+                  />
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {!isStaff && (
             <div>
