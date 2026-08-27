@@ -348,7 +348,7 @@ export const ShiftsPage: React.FC = () => {
                       <th className="py-3.5 px-6">Assigned Shift</th>
                       <th className="py-3.5 px-6">Shift Timing</th>
                       <th className="py-3.5 px-6">Attendance Status</th>
-                      <th className="py-3.5 px-6 text-right">Actions</th>
+                      {!isStaff && <th className="py-3.5 px-6 text-right">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 text-sm">
@@ -379,15 +379,17 @@ export const ShiftsPage: React.FC = () => {
                             <span className="text-xs text-slate-400 italic">Not logged</span>
                           )}
                         </td>
-                        <td className="py-4 px-6 text-right">
-                          <button
-                            onClick={() => handleDeleteAssignment(asg.id)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-50 transition"
-                            title="Remove assignment"
-                          >
-                            <Trash2 className="w-4 h-4" />
-                          </button>
-                        </td>
+                        {!isStaff && (
+                          <td className="py-4 px-6 text-right">
+                            <button
+                              onClick={() => handleDeleteAssignment(asg.id)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-50 transition"
+                              title="Remove assignment"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </td>
+                        )}
                       </tr>
                     ))}
                   </tbody>
@@ -421,28 +423,32 @@ export const ShiftsPage: React.FC = () => {
                     <div className="w-10 h-10 rounded-xl bg-[#f9f5ea] text-[#876420] flex items-center justify-center border border-[#ecdcb7]">
                       <Clock className="w-5 h-5" />
                     </div>
-                    <div className="flex items-center space-x-1">
-                      <button
-                        onClick={() => {
-                          setEditingShift(shift);
-                          setShiftForm({
-                            name: shift.name,
-                            startTime: shift.startTime,
-                            endTime: shift.endTime,
-                          });
-                          setIsShiftModalOpen(true);
-                        }}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-[#c29b38] hover:bg-[#f9f5ea] transition"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteShift(shift)}
-                        className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-50 transition"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
+                    {isAdmin && (
+                      <div className="flex items-center space-x-1">
+                        <button
+                          onClick={() => {
+                            setEditingShift(shift);
+                            setShiftForm({
+                              name: shift.name,
+                              startTime: shift.startTime,
+                              endTime: shift.endTime,
+                            });
+                            setIsShiftModalOpen(true);
+                          }}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-[#c29b38] hover:bg-[#f9f5ea] transition"
+                          title="Edit shift definition"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteShift(shift)}
+                          className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-slate-50 transition"
+                          title="Delete shift definition"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
+                    )}
                   </div>
                   <h3 className="text-lg font-bold text-slate-900 mt-4">{shift.name}</h3>
                   <div className="mt-3 flex items-center space-x-2 text-slate-700 bg-[#fdfbf7] p-2.5 rounded-xl font-mono text-sm border border-[#ecdcb7]">
