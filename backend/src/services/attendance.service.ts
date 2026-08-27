@@ -198,6 +198,30 @@ export class AttendanceService {
       explicitStatus: data.status,
     });
 
+    // Safeguard 4: For STAFF, check if check-in is before the allowed pre-shift window (up to 30 mins before shift start)
+    if (actor?.role === 'STAFF' && assignment?.shift?.startTime && data.checkIn) {
+      const [startHoursStr, startMinutesStr] = assignment.shift.startTime.split(':');
+      const startHours = parseInt(startHoursStr, 10);
+      const startMinutes = parseInt(startMinutesStr, 10);
+      if (!isNaN(startHours) && !isNaN(startMinutes)) {
+        const shiftStartTotalMinutes = startHours * 60 + startMinutes;
+        const checkInDateObj = typeof data.checkIn === 'string' ? new Date(data.checkIn) : data.checkIn;
+        const checkInTotalMinutes = checkInDateObj.getHours() * 60 + checkInDateObj.getMinutes();
+
+        let diffMinutes = checkInTotalMinutes - shiftStartTotalMinutes;
+        if (diffMinutes < -720) diffMinutes += 1440;
+        else if (diffMinutes > 720) diffMinutes -= 1440;
+
+        // If trying to punch in earlier than 30 minutes before shift start:
+        if (diffMinutes < -30) {
+          const openHour = Math.floor(((shiftStartTotalMinutes - 30 + 1440) % 1440) / 60);
+          const openMin = (shiftStartTotalMinutes - 30 + 1440) % 60;
+          const openTimeFormatted = `${String(openHour).padStart(2, '0')}:${String(openMin).padStart(2, '0')}`;
+          throw new AppError(`Check-in window is not open yet. You can punch in starting from ${openTimeFormatted} (30 minutes prior to your shift start at ${assignment.shift.startTime}).`, 400);
+        }
+      }
+    }
+
     const checkInDate = data.checkIn ? new Date(data.checkIn) : null;
     const checkOutDate = data.checkOut ? new Date(data.checkOut) : null;
 

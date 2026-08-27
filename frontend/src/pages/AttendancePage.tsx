@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { api, Attendance, Employee, Department } from '../api/client';
+import { api, Attendance, Employee, Department, ShiftAssignment } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { toast } from '../context/ToastContext';
 import { Badge } from '../components/Badge';
@@ -15,16 +15,26 @@ import {
   Search,
   Edit3,
   Trash2,
+  Clock,
+  Lock,
 } from 'lucide-react';
 
 export const AttendancePage: React.FC = () => {
   const { user, isStaff } = useAuth();
   const [attendanceList, setAttendanceList] = useState<Attendance[]>([]);
+  const [todayAssignment, setTodayAssignment] = useState<ShiftAssignment | null>(null);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
+
+  // Live real-time synced clock (ticks every second)
+  const [currentTime, setCurrentTime] = useState(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTime(new Date()), 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   // Filters & Pagination
   const [search, setSearch] = useState('');
@@ -69,7 +79,9 @@ export const AttendancePage: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [attRes, empRes, deptRes] = await Promise.all([
+      const todayStr = new Date().toISOString().split('T')[0];
+
+      const [attRes, empRes, deptRes, shiftRes] = await Promise.all([
         api.getAttendance({
           search: search.trim() || undefined,
           from: fromDate || undefined,
@@ -81,6 +93,7 @@ export const AttendancePage: React.FC = () => {
         }),
         isStaff ? Promise.resolve({ data: [] }) : api.getEmployees({ status: 'ACTIVE', pageSize: 100 }).catch(() => ({ data: [] })),
         isStaff ? Promise.resolve({ data: [] }) : api.getDepartments().catch(() => ({ data: [] })),
+        isStaff ? api.getShiftAssignments({ date: todayStr }).catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ]);
 
       setAttendanceList(attRes.data || []);
@@ -90,6 +103,12 @@ export const AttendancePage: React.FC = () => {
       }
       setEmployees(empRes.data || []);
       setDepartments(deptRes.data || []);
+
+      if (isStaff && shiftRes.data && shiftRes.data.length > 0) {
+        setTodayAssignment(shiftRes.data[0]);
+      } else {
+        setTodayAssignment(null);
+      }
     } catch (err: any) {
       setError(err.message || 'Failed to load attendance');
     } finally {
@@ -100,6 +119,60 @@ export const AttendancePage: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fromDate, toDate, deptFilter, statusFilter, search, page]);
+
+  // Evaluate Live Pre/Post Shift Range for Staff
+  const todayStr = new Date().toISOString().split('T')[0];
+  const todayRecord = attendanceList.find((a) => a.date.startsWith(todayStr));
+  const assignedShift = todayAssignment?.shift;
+
+  let openWindowTimeStr = '06:30';
+  let windowStatusNote = '';
+  let canStaffPunchIn = true;
+  let canStaffClockOut = true;
+  let punchInBlockReason = '';
+  let clockOutBlockReason = '';
+
+  if (isStaff) {
+    if (assignedShift) {
+      const [startH, startM] = assignedShift.startTime.split(':').map(Number);
+      const shiftStartMinutes = startH * 60 + startM;
+      const windowOpenMinutes = shiftStartMinutes - 30; // 30 mins pre-shift window
+      const currentMinutes = currentTime.getHours() * 60 + currentTime.getMinutes();
+
+      let diffMinutes = currentMinutes - shiftStartMinutes;
+      if (diffMinutes < -720) diffMinutes += 1440;
+      else if (diffMinutes > 720) diffMinutes -= 1440;
+
+      const openH = Math.floor(((windowOpenMinutes + 1440) % 1440) / 60);
+      const openM = (windowOpenMinutes + 1440) % 60;
+      openWindowTimeStr = `${String(openH).padStart(2, '0')}:${String(openM).padStart(2, '0')}`;
+
+      if (diffMinutes < -30) {
+        canStaffPunchIn = false;
+        punchInBlockReason = `Window opens at ${openWindowTimeStr} (30m before shift)`;
+        windowStatusNote = `Pre-shift window locked. Opens at ${openWindowTimeStr}.`;
+      } else if (diffMinutes <= 10) {
+        windowStatusNote = `On-Time Grace window active (Shift starts ${assignedShift.startTime})`;
+      } else {
+        windowStatusNote = `Late window active (Shift started at ${assignedShift.startTime})`;
+      }
+    }
+
+    if (todayRecord?.checkIn) {
+      canStaffPunchIn = false;
+      const formattedIn = new Date(todayRecord.checkIn).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      punchInBlockReason = `Already checked in today at ${formattedIn}`;
+    }
+
+    if (!todayRecord?.checkIn) {
+      canStaffClockOut = false;
+      clockOutBlockReason = 'Must punch check-in before clocking out';
+    } else if (todayRecord?.checkOut) {
+      canStaffClockOut = false;
+      const formattedOut = new Date(todayRecord.checkOut).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+      clockOutBlockReason = `Already clocked out today at ${formattedOut}`;
+    }
+  }
 
   const handleOpenRecord = (defaultMode: 'CHECK_IN' | 'CHECK_OUT' = 'CHECK_IN') => {
     setPunchMode(defaultMode);
@@ -227,47 +300,101 @@ export const AttendancePage: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header Banner */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 bg-white p-6 rounded-2xl border border-[#ecdcb7]/80 shadow-sm">
-        <div>
-          <div className="flex items-center space-x-2">
-            <span className="w-2.5 h-2.5 rounded-full bg-[#c29b38]"></span>
-            <h1 className="text-2xl font-extrabold text-[#1d140d] tracking-tight">
-              {isStaff ? 'My Attendance Records' : 'Attendance & Time Tracking'}
-            </h1>
+      {/* Header Banner & Real-Time Staff Shift Command */}
+      <div className="bg-white p-6 rounded-2xl border border-[#ecdcb7]/80 shadow-sm space-y-4">
+        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+          <div>
+            <div className="flex items-center space-x-2">
+              <span className="w-2.5 h-2.5 rounded-full bg-[#c29b38]"></span>
+              <h1 className="text-2xl font-extrabold text-[#1d140d] tracking-tight">
+                {isStaff ? 'My Attendance & Live Punch Clock' : 'Attendance & Time Tracking'}
+              </h1>
+            </div>
+            <p className="text-sm text-slate-500 mt-1">
+              {isStaff
+                ? 'Synced live hotel time punch-in/out station with automatic shift window detection.'
+                : 'Automated punctuality derivation, punch-in/out logs, and daily compliance.'}
+            </p>
           </div>
-          <p className="text-sm text-slate-500 mt-1">
-            {isStaff
-              ? 'Record your shift punch in/out and view your daily punctuality logs.'
-              : 'Automated punctuality derivation, punch-in/out logs, and daily compliance.'}
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          {isStaff ? (
-            <>
+
+          {/* Real-Time Live Clock Pill */}
+          <div className="flex items-center space-x-3 self-start md:self-auto">
+            <div className="px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl flex items-center space-x-2 shadow-inner">
+              <Clock className="w-4 h-4 text-[#c29b38] animate-pulse" />
+              <div className="text-right">
+                <div className="text-[10px] uppercase font-bold text-[#876420] tracking-wider">Live Time</div>
+                <div className="text-sm font-black font-mono text-stone-900 tracking-wider">
+                  {currentTime.toLocaleTimeString()}
+                </div>
+              </div>
+            </div>
+
+            {!isStaff && (
               <button
                 onClick={() => handleOpenRecord('CHECK_IN')}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition transform active:scale-95"
+                className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white text-sm font-bold rounded-xl shadow-md shadow-[#c29b38]/20 transition transform active:scale-95"
               >
-                <span>🟢 Punch In</span>
+                <Plus className="w-4 h-4" />
+                <span>Log Attendance / Punch</span>
               </button>
-              <button
-                onClick={() => handleOpenRecord('CHECK_OUT')}
-                className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition transform active:scale-95"
-              >
-                <span>🟠 Clock Out</span>
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => handleOpenRecord('CHECK_IN')}
-              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white text-sm font-bold rounded-xl shadow-md shadow-[#c29b38]/20 transition transform active:scale-95 self-start md:self-auto"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Log Attendance / Punch</span>
-            </button>
-          )}
+            )}
+          </div>
         </div>
+
+        {/* Staff Live Shift Status & Controlled Punch Station */}
+        {isStaff && (
+          <div className="p-4 bg-gradient-to-br from-[#fcfaf6] to-[#f7f0e0] border border-[#ecdcb7] rounded-2xl flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div className="space-y-1">
+              <div className="flex items-center space-x-2">
+                <span className="text-xs font-bold uppercase tracking-wider text-[#876420]">Today's Shift:</span>
+                {assignedShift ? (
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-md bg-[#ecdcb7]/80 text-[#5f4410] font-bold text-xs">
+                    {assignedShift.name} ({assignedShift.startTime} - {assignedShift.endTime})
+                  </span>
+                ) : (
+                  <span className="text-xs text-slate-500 italic">No assigned shift for today</span>
+                )}
+              </div>
+              <div className="text-xs text-slate-600 flex items-center space-x-1.5">
+                <span>{windowStatusNote || 'Punch window synchronized with your department schedule.'}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center space-x-2.5">
+              {/* Controlled Punch In Button */}
+              <button
+                type="button"
+                disabled={!canStaffPunchIn}
+                onClick={() => handleOpenRecord('CHECK_IN')}
+                className={`inline-flex items-center space-x-2 px-4 py-2.5 text-xs font-bold rounded-xl transition transform shadow-sm ${
+                  canStaffPunchIn
+                    ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-600/30 hover:scale-105 active:scale-95'
+                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                }`}
+                title={punchInBlockReason || 'Punch check-in for your scheduled shift'}
+              >
+                {!canStaffPunchIn ? <Lock className="w-3.5 h-3.5" /> : <span>🟢</span>}
+                <span>Punch Check-In</span>
+              </button>
+
+              {/* Controlled Clock Out Button */}
+              <button
+                type="button"
+                disabled={!canStaffClockOut}
+                onClick={() => handleOpenRecord('CHECK_OUT')}
+                className={`inline-flex items-center space-x-2 px-4 py-2.5 text-xs font-bold rounded-xl transition transform shadow-sm ${
+                  canStaffClockOut
+                    ? 'bg-amber-600 hover:bg-amber-700 text-white shadow-amber-600/30 hover:scale-105 active:scale-95'
+                    : 'bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed'
+                }`}
+                title={clockOutBlockReason || 'Clock out for today'}
+              >
+                {!canStaffClockOut ? <Lock className="w-3.5 h-3.5" /> : <span>🟠</span>}
+                <span>Clock Out</span>
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Logic Callout Notice */}
@@ -600,14 +727,29 @@ export const AttendancePage: React.FC = () => {
           {isStaff ? (
             <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3 text-center">
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#876420]">
-                Live Time Clock ({punchMode === 'CHECK_IN' ? 'Check-In' : 'Clock-Out'})
+                Live Real-Time Clock ({punchMode === 'CHECK_IN' ? 'Check-In' : 'Clock-Out'})
               </div>
-              <div className="text-2xl font-black font-mono text-[#1d140d] tracking-widest bg-white py-2 rounded-lg border border-[#ecdcb7]">
-                {new Date().toTimeString().slice(0, 5)}
+              <div className="text-2xl font-black font-mono text-[#1d140d] tracking-widest bg-white py-2 rounded-lg border border-[#ecdcb7] shadow-inner">
+                {currentTime.toLocaleTimeString()}
               </div>
               <p className="text-[11px] text-slate-500">
-                Timestamp is automatically locked to the server/system clock upon punching.
+                Timestamp is continuously synced to the hotel system clock.
               </p>
+
+              {/* Staff window validation warning if locked */}
+              {punchMode === 'CHECK_IN' && !canStaffPunchIn && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center space-x-2 text-left">
+                  <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <span>{punchInBlockReason || 'Check-in is currently unavailable for your shift window.'}</span>
+                </div>
+              )}
+
+              {punchMode === 'CHECK_OUT' && !canStaffClockOut && (
+                <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-xs text-amber-800 flex items-center space-x-2 text-left">
+                  <Lock className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <span>{clockOutBlockReason || 'Clock-out is unavailable.'}</span>
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3">
@@ -668,8 +810,11 @@ export const AttendancePage: React.FC = () => {
             </button>
             <button
               type="submit"
+              disabled={isStaff && ((punchMode === 'CHECK_IN' && !canStaffPunchIn) || (punchMode === 'CHECK_OUT' && !canStaffClockOut))}
               className={`px-5 py-2 rounded-xl text-sm font-bold text-white shadow-md transition ${
-                punchMode === 'CHECK_OUT'
+                isStaff && ((punchMode === 'CHECK_IN' && !canStaffPunchIn) || (punchMode === 'CHECK_OUT' && !canStaffClockOut))
+                  ? 'bg-slate-300 text-slate-500 cursor-not-allowed'
+                  : punchMode === 'CHECK_OUT'
                   ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800'
                   : 'bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220]'
               }`}
