@@ -1,5 +1,7 @@
 import { Prisma } from '@prisma/client';
 import prisma from '../lib/prisma.js';
+import { toDateOnly } from '../lib/date.js';
+import { AppError } from '../middleware/errorHandler.js';
 
 export interface CreateShiftAssignmentInput {
   employeeId: number;
@@ -9,10 +11,31 @@ export interface CreateShiftAssignmentInput {
 
 export class ShiftAssignmentService {
   static async create(data: CreateShiftAssignmentInput) {
-    const calendarDate = new Date(data.date);
-    const normalizedDate = new Date(
-      Date.UTC(calendarDate.getUTCFullYear(), calendarDate.getUTCMonth(), calendarDate.getUTCDate())
-    );
+    const normalizedDate = toDateOnly(data.date);
+
+    // Safeguard 1: Check employee exists and reject if INACTIVE
+    const employee = await prisma.employee.findUnique({
+      where: { id: data.employeeId },
+      select: { id: true, status: true, firstName: true, lastName: true },
+    });
+
+    if (!employee) {
+      throw new AppError(`Employee with ID ${data.employeeId} not found`, 404);
+    }
+
+    if (employee.status === 'INACTIVE') {
+      throw new AppError(`Cannot assign a shift to inactive employee ${employee.firstName} ${employee.lastName}.`, 400);
+    }
+
+    // Check shift exists
+    const shift = await prisma.shift.findUnique({
+      where: { id: data.shiftId },
+      select: { id: true },
+    });
+
+    if (!shift) {
+      throw new AppError(`Shift with ID ${data.shiftId} not found`, 404);
+    }
 
     return prisma.shiftAssignment.create({
       data: {
@@ -47,9 +70,7 @@ export class ShiftAssignmentService {
     const where: Prisma.ShiftAssignmentWhereInput = {};
 
     if (params.date) {
-      const parts = params.date.split('-');
-      const targetDate = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
-      where.date = targetDate;
+      where.date = toDateOnly(params.date);
     }
 
     if (params.employeeId) {

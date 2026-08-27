@@ -1,4 +1,5 @@
 import prisma from '../lib/prisma.js';
+import { toDateOnly } from '../lib/date.js';
 
 export class ReportService {
   /**
@@ -13,12 +14,12 @@ export class ReportService {
 
     if (params.month && /^\d{4}-\d{2}$/.test(params.month)) {
       const [year, month] = params.month.split('-').map(Number);
-      startDate = new Date(Date.UTC(year, month - 1, 1));
+      startDate = new Date(Date.UTC(year, month - 1, 1, 0, 0, 0, 0));
       endDate = new Date(Date.UTC(year, month, 0, 23, 59, 59, 999));
     } else {
       // Default to current month
       const now = new Date();
-      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+      startDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1, 0, 0, 0, 0));
       endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
     }
 
@@ -96,8 +97,8 @@ export class ReportService {
     });
 
     const results = Array.from(departmentStatsMap.values()).map((stats) => {
-      // Attendance rate = (PRESENT + LATE) / (Total Records - ON_LEAVE) or Total Records
-      // Standard HR calculation: Present on duty (Present + Late) out of expected working days (excluding approved leave)
+      // Attendance rate = (PRESENT + LATE) / (Total Records - ON_LEAVE)
+      // Excludes approved on-leave from the denominator of expected working shifts
       const expectedWorkingDays = stats.totalRecords - stats.onLeaveCount;
       const onDuty = stats.presentCount + stats.lateCount;
       const attendanceRate =
@@ -126,6 +127,7 @@ export class ReportService {
   /**
    * Absenteeism report:
    * Ranked employees by count of ABSENT + LATE records in date range descending.
+   * Explicitly excludes ON_LEAVE since planned leaves are not infractions.
    */
   static async getAbsenteeismReport(params: { from?: string; to?: string; limit?: number }) {
     const limit = Math.max(1, Math.min(100, params.limit || 10));
@@ -134,20 +136,22 @@ export class ReportService {
     let endDate: Date;
 
     if (params.from) {
-      startDate = new Date(params.from);
+      startDate = toDateOnly(params.from);
     } else {
       // Default to last 30 days
-      startDate = new Date();
-      startDate.setDate(startDate.getDate() - 30);
+      const d = new Date();
+      d.setDate(d.getDate() - 30);
+      startDate = toDateOnly(d);
     }
 
     if (params.to) {
-      endDate = new Date(params.to);
+      endDate = toDateOnly(params.to);
+      endDate.setUTCHours(23, 59, 59, 999);
     } else {
       endDate = new Date();
     }
 
-    // Find all attendance records with ABSENT or LATE in the range
+    // Find all attendance records with ABSENT or LATE only in the range
     const attendanceRecords = await prisma.attendance.findMany({
       where: {
         date: {
@@ -155,7 +159,7 @@ export class ReportService {
           lte: endDate,
         },
         status: {
-          in: ['ABSENT', 'LATE'],
+          in: ['ABSENT', 'LATE'], // Excludes ON_LEAVE
         },
       },
       include: {
@@ -225,14 +229,7 @@ export class ReportService {
    * All ShiftAssignments for a given date, grouped by Department then Shift, showing employee name and role.
    */
   static async getRosterReport(dateStr?: string) {
-    let targetDate: Date;
-    if (dateStr) {
-      const parts = dateStr.split('-');
-      targetDate = new Date(Date.UTC(Number(parts[0]), Number(parts[1]) - 1, Number(parts[2])));
-    } else {
-      const now = new Date();
-      targetDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-    }
+    const targetDate = dateStr ? toDateOnly(dateStr) : toDateOnly(new Date());
 
     const assignments = await prisma.shiftAssignment.findMany({
       where: {

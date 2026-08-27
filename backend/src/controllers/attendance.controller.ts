@@ -3,13 +3,44 @@ import { z } from 'zod';
 import { AttendanceService } from '../services/attendance.service.js';
 import { AppError } from '../middleware/errorHandler.js';
 
-export const recordAttendanceSchema = z.object({
-  employeeId: z.number().int().positive('employeeId is required'),
-  date: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD or ISO datetime')),
-  checkIn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
-  checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
-  status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']).optional().nullable(),
-});
+import { toDateOnly, isAfterToday } from '../lib/date.js';
+
+export const recordAttendanceSchema = z
+  .object({
+    employeeId: z.number().int().positive('employeeId is required'),
+    date: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD or ISO datetime')),
+    checkIn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
+    checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
+    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']).optional().nullable(),
+  })
+  .refine(
+    (data) => {
+      // Validate checkOut > checkIn if both provided
+      if (data.checkIn && data.checkOut) {
+        const inTime = new Date(data.checkIn).getTime();
+        const outTime = new Date(data.checkOut).getTime();
+        return outTime > inTime;
+      }
+      return true;
+    },
+    {
+      message: 'checkOut time must be later than checkIn time',
+      path: ['checkOut'],
+    }
+  )
+  .refine(
+    (data) => {
+      // Reject attendance records dated after today, unless status is ON_LEAVE
+      if (isAfterToday(data.date)) {
+        return data.status === 'ON_LEAVE';
+      }
+      return true;
+    },
+    {
+      message: 'Attendance records dated after today are not permitted unless status is ON_LEAVE',
+      path: ['date'],
+    }
+  );
 
 export class AttendanceController {
   static async recordAttendance(req: Request, res: Response, next: NextFunction) {

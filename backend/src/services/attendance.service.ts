@@ -65,6 +65,9 @@ export function deriveAttendanceStatus(input: DeriveStatusInput): AttendanceStat
   return 'PRESENT';
 }
 
+import { toDateOnly, isAfterToday } from '../lib/date.js';
+import { AppError } from '../middleware/errorHandler.js';
+
 export interface RecordAttendanceInput {
   employeeId: number;
   date: string | Date;
@@ -75,11 +78,35 @@ export interface RecordAttendanceInput {
 
 export class AttendanceService {
   static async recordAttendance(data: RecordAttendanceInput) {
-    const calendarDate = new Date(data.date);
-    // Normalize date to YYYY-MM-DDT00:00:00.000Z
-    const normalizedDate = new Date(
-      Date.UTC(calendarDate.getUTCFullYear(), calendarDate.getUTCMonth(), calendarDate.getUTCDate())
-    );
+    const normalizedDate = toDateOnly(data.date);
+
+    // Safeguard 1: Reject creating Attendance for an inactive employee (400 error)
+    const employee = await prisma.employee.findUnique({
+      where: { id: data.employeeId },
+      select: { id: true, status: true, firstName: true, lastName: true },
+    });
+
+    if (!employee) {
+      throw new AppError(`Employee with ID ${data.employeeId} not found`, 404);
+    }
+
+    if (employee.status === 'INACTIVE') {
+      throw new AppError(`Cannot record attendance for inactive employee ${employee.firstName} ${employee.lastName}.`, 400);
+    }
+
+    // Safeguard 2: Reject attendance records dated after today, unless status is ON_LEAVE
+    if (isAfterToday(normalizedDate) && data.status !== 'ON_LEAVE') {
+      throw new AppError('Attendance records dated after today are not permitted unless status is ON_LEAVE.', 400);
+    }
+
+    // Safeguard 3: Validate checkOut > checkIn if both provided
+    if (data.checkIn && data.checkOut) {
+      const inTime = new Date(data.checkIn).getTime();
+      const outTime = new Date(data.checkOut).getTime();
+      if (outTime <= inTime) {
+        throw new AppError('checkOut time must be later than checkIn time.', 400);
+      }
+    }
 
     // Find shift assignment for this employee on this date if any
     const assignment = await prisma.shiftAssignment.findUnique({
@@ -176,10 +203,13 @@ export class AttendanceService {
     if (params.from || params.to) {
       where.date = {};
       if (params.from) {
-        where.date.gte = new Date(params.from);
+        where.date.gte = toDateOnly(params.from);
       }
       if (params.to) {
-        where.date.lte = new Date(params.to);
+        // End of the target day (23:59:59.999 UTC)
+        const toEnd = toDateOnly(params.to);
+        toEnd.setUTCHours(23, 59, 59, 999);
+        where.date.lte = toEnd;
       }
     }
 

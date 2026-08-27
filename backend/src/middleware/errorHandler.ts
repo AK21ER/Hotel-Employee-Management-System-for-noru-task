@@ -28,11 +28,25 @@ export const errorHandler = (
   // Prisma unique constraint violation
   if (err instanceof Prisma.PrismaClientKnownRequestError) {
     if (err.code === 'P2002') {
-      const target = (err.meta?.target as string[])?.join(', ') || 'fields';
+      const target = err.meta?.target;
+      let targetStr = Array.isArray(target) ? target.join(', ') : String(target || '');
+      let specificMessage = `A unique constraint failed on (${targetStr || 'fields'}).`;
+
+      if (targetStr.includes('email')) {
+        specificMessage = 'An employee with this email address already exists.';
+      } else if (targetStr.includes('employeeId') && targetStr.includes('date')) {
+        specificMessage = 'A duplicate record already exists for this employee on this date (only one shift assignment and one attendance record allowed per employee per day).';
+      } else if (targetStr.includes('name')) {
+        specificMessage = 'A department with this name already exists.';
+      } else if (targetStr.includes('title')) {
+        specificMessage = 'A role with this title already exists.';
+      }
+
       return res.status(409).json({
         error: 'Conflict',
-        message: `A record with this ${target} already exists.`,
+        message: specificMessage,
         code: err.code,
+        target: targetStr,
       });
     }
 
@@ -45,13 +59,14 @@ export const errorHandler = (
       });
     }
 
-    // Foreign key constraint failed
+    // Foreign key constraint failed (e.g. deleting department or role with active staff)
     if (err.code === 'P2003') {
       const field = (err.meta?.field_name as string) || 'foreign key';
-      return res.status(400).json({
-        error: 'Bad Request',
-        message: `Foreign key constraint failed on ${field}. Related record does not exist.`,
+      return res.status(409).json({
+        error: 'Conflict',
+        message: 'Cannot delete: one or more employees or records still reference this resource.',
         code: err.code,
+        details: { field },
       });
     }
   }
