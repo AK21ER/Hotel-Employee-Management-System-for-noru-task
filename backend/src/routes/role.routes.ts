@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { RoleController, createRoleSchema, updateRoleSchema } from '../controllers/role.controller.js';
 import { validateRequest } from '../middleware/validate.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -57,7 +60,12 @@ router.get('/', RoleController.getAll);
  *       409:
  *         description: Role title already exists
  */
-router.post('/', validateRequest({ body: createRoleSchema }), RoleController.create);
+router.post(
+  '/',
+  requireRole('ADMIN'),
+  validateRequest({ body: createRoleSchema }),
+  RoleController.create
+);
 
 /**
  * @swagger
@@ -108,7 +116,12 @@ router.get('/:id', RoleController.getById);
  *       404:
  *         description: Role not found
  */
-router.put('/:id', validateRequest({ body: updateRoleSchema }), RoleController.update);
+router.put(
+  '/:id',
+  requireRole('ADMIN'),
+  validateRequest({ body: updateRoleSchema }),
+  RoleController.update
+);
 
 /**
  * @swagger
@@ -128,6 +141,6 @@ router.put('/:id', validateRequest({ body: updateRoleSchema }), RoleController.u
  *       404:
  *         description: Role not found
  */
-router.delete('/:id', RoleController.delete);
+router.delete('/:id', requireRole('ADMIN'), RoleController.delete);
 
 export default router;

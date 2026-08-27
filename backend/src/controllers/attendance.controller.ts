@@ -45,7 +45,7 @@ export const recordAttendanceSchema = z
 export class AttendanceController {
   static async recordAttendance(req: Request, res: Response, next: NextFunction) {
     try {
-      const attendance = await AttendanceService.recordAttendance(req.body);
+      const attendance = await AttendanceService.recordAttendance(req.body, req.user);
       res.status(201).json({
         message: 'Attendance recorded successfully',
         data: attendance,
@@ -58,16 +58,19 @@ export class AttendanceController {
   static async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const { search, employeeId, departmentId, from, to, status, page, pageSize } = req.query;
-      const result = await AttendanceService.getAttendanceList({
-        search: search ? String(search) : undefined,
-        employeeId: employeeId ? Number(employeeId) : undefined,
-        departmentId: departmentId ? Number(departmentId) : undefined,
-        from: from ? String(from) : undefined,
-        to: to ? String(to) : undefined,
-        status: status as any,
-        page: page ? Number(page) : undefined,
-        pageSize: pageSize ? Number(pageSize) : undefined,
-      });
+      const result = await AttendanceService.getAttendanceList(
+        {
+          search: search ? String(search) : undefined,
+          employeeId: employeeId ? Number(employeeId) : undefined,
+          departmentId: departmentId ? Number(departmentId) : undefined,
+          from: from ? String(from) : undefined,
+          to: to ? String(to) : undefined,
+          status: status as any,
+          page: page ? Number(page) : undefined,
+          pageSize: pageSize ? Number(pageSize) : undefined,
+        },
+        req.user
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -79,7 +82,7 @@ export class AttendanceController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      const record = await AttendanceService.getAttendanceById(id);
+      const record = await AttendanceService.getAttendanceById(id, req.user);
       if (!record) {
         throw new AppError('Attendance record not found', 404);
       }
@@ -94,7 +97,7 @@ export class AttendanceController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      await AttendanceService.deleteAttendance(id);
+      await AttendanceService.deleteAttendance(id, req.user);
       res.status(200).json({
         message: 'Attendance record deleted successfully',
       });

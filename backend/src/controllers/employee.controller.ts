@@ -28,10 +28,11 @@ export const updateEmployeeSchema = z.object({
 export class EmployeeController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const employee = await EmployeeService.create(req.body);
+      const result = await EmployeeService.create(req.body, req.user);
       res.status(201).json({
-        message: 'Employee created successfully',
-        data: employee,
+        message: 'Employee created successfully. A temporary staff account has been auto-provisioned.',
+        data: result.employee,
+        tempPassword: result.tempPassword, // Returned once so it can be communicated to employee
       });
     } catch (error) {
       next(error);
@@ -41,14 +42,17 @@ export class EmployeeController {
   static async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const { search, departmentId, roleId, status, page, pageSize } = req.query;
-      const result = await EmployeeService.getAll({
-        search: search ? String(search) : undefined,
-        departmentId: departmentId ? Number(departmentId) : undefined,
-        roleId: roleId ? Number(roleId) : undefined,
-        status: status as any,
-        page: page ? Number(page) : undefined,
-        pageSize: pageSize ? Number(pageSize) : undefined,
-      });
+      const result = await EmployeeService.getAll(
+        {
+          search: search ? String(search) : undefined,
+          departmentId: departmentId ? Number(departmentId) : undefined,
+          roleId: roleId ? Number(roleId) : undefined,
+          status: status as any,
+          page: page ? Number(page) : undefined,
+          pageSize: pageSize ? Number(pageSize) : undefined,
+        },
+        req.user
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -60,7 +64,7 @@ export class EmployeeController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      const employee = await EmployeeService.getById(id);
+      const employee = await EmployeeService.getById(id, req.user);
       if (!employee) {
         throw new AppError('Employee not found', 404);
       }
@@ -75,7 +79,7 @@ export class EmployeeController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      const updated = await EmployeeService.update(id, req.body);
+      const updated = await EmployeeService.update(id, req.body, req.user);
       res.status(200).json({
         message: 'Employee updated successfully',
         data: updated,
@@ -90,7 +94,7 @@ export class EmployeeController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      const deleted = await EmployeeService.delete(id);
+      const deleted = await EmployeeService.delete(id, req.user);
       res.status(200).json({
         message: 'Employee deactivated successfully (soft-deleted)',
         data: deleted,

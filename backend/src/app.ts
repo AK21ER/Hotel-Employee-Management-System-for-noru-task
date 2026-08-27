@@ -1,9 +1,11 @@
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import swaggerUi from 'swagger-ui-express';
 import { swaggerSpec } from './docs/swagger.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
+import authRoutes from './routes/auth.routes.js';
 import employeeRoutes from './routes/employee.routes.js';
 import departmentRoutes from './routes/department.routes.js';
 import roleRoutes from './routes/role.routes.js';
@@ -16,7 +18,13 @@ export const createApp = () => {
   const app = express();
 
   // Global Middleware
-  app.use(cors());
+  app.use(
+    cors({
+      origin: ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5173'],
+      credentials: true,
+    })
+  );
+  app.use(cookieParser());
   app.use(express.json());
 
   // API Documentation (Swagger)
@@ -28,6 +36,7 @@ export const createApp = () => {
   });
 
   // API Routes
+  app.use('/api/auth', authRoutes);
   app.use('/api/employees', employeeRoutes);
   app.use('/api/departments', departmentRoutes);
   app.use('/api/roles', roleRoutes);

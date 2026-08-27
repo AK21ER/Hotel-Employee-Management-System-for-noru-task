@@ -4,8 +4,11 @@ import {
   createShiftAssignmentSchema,
 } from '../controllers/shift-assignment.controller.js';
 import { validateRequest } from '../middleware/validate.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -80,7 +83,12 @@ router.get('/', ShiftAssignmentController.getAll);
  *       409:
  *         description: Employee already has a shift assigned on this date (DB Unique constraint enforced)
  */
-router.post('/', validateRequest({ body: createShiftAssignmentSchema }), ShiftAssignmentController.create);
+router.post(
+  '/',
+  requireRole('ADMIN', 'MANAGER'),
+  validateRequest({ body: createShiftAssignmentSchema }),
+  ShiftAssignmentController.create
+);
 
 /**
  * @swagger
@@ -120,6 +128,6 @@ router.get('/:id', ShiftAssignmentController.getById);
  *       404:
  *         description: Assignment not found
  */
-router.delete('/:id', ShiftAssignmentController.delete);
+router.delete('/:id', requireRole('ADMIN', 'MANAGER'), ShiftAssignmentController.delete);
 
 export default router;

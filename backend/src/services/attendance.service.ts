@@ -67,6 +67,7 @@ export function deriveAttendanceStatus(input: DeriveStatusInput): AttendanceStat
 
 import { toDateOnly, isAfterToday } from '../lib/date.js';
 import { AppError } from '../middleware/errorHandler.js';
+import { AuthUserPayload } from '../lib/auth.js';
 
 export interface RecordAttendanceInput {
   employeeId: number;
@@ -77,17 +78,30 @@ export interface RecordAttendanceInput {
 }
 
 export class AttendanceService {
-  static async recordAttendance(data: RecordAttendanceInput) {
+  static async recordAttendance(data: RecordAttendanceInput, actor?: AuthUserPayload) {
+    // If actor is STAFF, server forces employeeId = req.user.employeeId, ignoring any client value
+    let targetEmployeeId = data.employeeId;
+    if (actor?.role === 'STAFF') {
+      if (!actor.employeeId) {
+        throw new AppError('No linked employee profile found for staff user', 400);
+      }
+      targetEmployeeId = actor.employeeId;
+    }
+
     const normalizedDate = toDateOnly(data.date);
 
     // Safeguard 1: Reject creating Attendance for an inactive employee (400 error)
     const employee = await prisma.employee.findUnique({
-      where: { id: data.employeeId },
-      select: { id: true, status: true, firstName: true, lastName: true },
+      where: { id: targetEmployeeId },
+      select: { id: true, status: true, firstName: true, lastName: true, departmentId: true },
     });
 
     if (!employee) {
-      throw new AppError(`Employee with ID ${data.employeeId} not found`, 404);
+      throw new AppError(`Employee with ID ${targetEmployeeId} not found`, 404);
+    }
+
+    if (actor?.role === 'MANAGER' && employee.departmentId !== actor.departmentId) {
+      throw new AppError('Managers can only log attendance for employees in their own department', 403);
     }
 
     if (employee.status === 'INACTIVE') {
@@ -112,7 +126,7 @@ export class AttendanceService {
     const assignment = await prisma.shiftAssignment.findUnique({
       where: {
         employeeId_date: {
-          employeeId: data.employeeId,
+          employeeId: targetEmployeeId,
           date: normalizedDate,
         },
       },
@@ -135,12 +149,12 @@ export class AttendanceService {
     const attendance = await prisma.attendance.upsert({
       where: {
         employeeId_date: {
-          employeeId: data.employeeId,
+          employeeId: targetEmployeeId,
           date: normalizedDate,
         },
       },
       create: {
-        employeeId: data.employeeId,
+        employeeId: targetEmployeeId,
         date: normalizedDate,
         status: finalStatus,
         checkIn: checkInDate,
@@ -171,41 +185,56 @@ export class AttendanceService {
     return attendance;
   }
 
-  static async getAttendanceList(params: {
-    search?: string;
-    employeeId?: number;
-    departmentId?: number;
-    from?: string;
-    to?: string;
-    status?: AttendanceStatus;
-    page?: number;
-    pageSize?: number;
-  }) {
+  static async getAttendanceList(
+    params: {
+      search?: string;
+      employeeId?: number;
+      departmentId?: number;
+      from?: string;
+      to?: string;
+      status?: AttendanceStatus;
+      page?: number;
+      pageSize?: number;
+    },
+    actor?: AuthUserPayload
+  ) {
     const page = Math.max(1, params.page || 1);
     const pageSize = Math.min(100, Math.max(1, params.pageSize || 20));
     const skip = (page - 1) * pageSize;
 
     const where: Prisma.AttendanceWhereInput = {};
 
-    if (params.employeeId) {
-      where.employeeId = params.employeeId;
+    if (actor?.role === 'STAFF') {
+      // Force filter to own employee record
+      where.employeeId = actor.employeeId || -1;
+    } else if (actor?.role === 'MANAGER') {
+      where.employee = {
+        departmentId: actor.departmentId || -1,
+      };
+      if (params.employeeId) {
+        where.employeeId = params.employeeId;
+      }
+    } else {
+      if (params.employeeId) {
+        where.employeeId = params.employeeId;
+      }
+      if (params.departmentId) {
+        where.employee = {
+          departmentId: params.departmentId,
+        };
+      }
     }
 
-    if (params.departmentId || params.search) {
-      where.employee = {};
-
-      if (params.departmentId) {
-        where.employee.departmentId = params.departmentId;
-      }
-
-      if (params.search && params.search.trim()) {
-        const query = params.search.trim();
-        where.employee.OR = [
+    if (params.search && params.search.trim()) {
+      const query = params.search.trim();
+      where.employee = {
+        ...((where.employee as Prisma.EmployeeWhereInput) || {}),
+        OR: [
           { firstName: { contains: query, mode: 'insensitive' } },
           { lastName: { contains: query, mode: 'insensitive' } },
           { email: { contains: query, mode: 'insensitive' } },
-        ];
-      }
+        ],
+      };
     }
 
     if (params.status) {
@@ -259,7 +288,7 @@ export class AttendanceService {
     };
   }
 
-  static async getAttendanceById(id: number) {
+  static async getAttendanceById(id: number, actor?: AuthUserPayload) {
     const record = await prisma.attendance.findUnique({
       where: { id },
       include: {
@@ -276,10 +305,40 @@ export class AttendanceService {
         },
       },
     });
+
+    if (!record) {
+      return null;
+    }
+
+    if (actor?.role === 'MANAGER' && record.employee.departmentId !== actor.departmentId) {
+      throw new AppError('Access denied: attendance belongs to another department', 403);
+    }
+
+    if (actor?.role === 'STAFF' && record.employeeId !== actor.employeeId) {
+      throw new AppError('Access denied: staff can only view their own attendance', 403);
+    }
+
     return record;
   }
 
-  static async deleteAttendance(id: number) {
+  static async deleteAttendance(id: number, actor?: AuthUserPayload) {
+    const existing = await prisma.attendance.findUnique({
+      where: { id },
+      include: { employee: true },
+    });
+
+    if (!existing) {
+      throw new AppError('Attendance record not found', 404);
+    }
+
+    if (actor?.role === 'STAFF') {
+      throw new AppError('Staff members cannot delete attendance records', 403);
+    }
+
+    if (actor?.role === 'MANAGER' && existing.employee.departmentId !== actor.departmentId) {
+      throw new AppError('Access denied: cannot delete attendance for another department', 403);
+    }
+
     return prisma.attendance.delete({
       where: { id },
     });

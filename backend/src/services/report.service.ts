@@ -1,5 +1,7 @@
 import prisma from '../lib/prisma.js';
 import { toDateOnly } from '../lib/date.js';
+import { AppError } from '../middleware/errorHandler.js';
+import { AuthUserPayload } from '../lib/auth.js';
 
 export class ReportService {
   /**
@@ -7,7 +9,18 @@ export class ReportService {
    * Calculates monthly per-department attendance rate (% present vs scheduled/recorded).
    * Aggregates Attendance records joined with Employee and Department using Prisma.
    */
-  static async getAttendanceRateReport(params: { month?: string; departmentId?: number }) {
+  static async getAttendanceRateReport(
+    params: { month?: string; departmentId?: number },
+    actor?: AuthUserPayload
+  ) {
+    if (actor?.role === 'STAFF') {
+      throw new AppError('Staff members do not have access to analytical reports', 403);
+    }
+
+    // Force department filter for MANAGER
+    const effectiveDepartmentId =
+      actor?.role === 'MANAGER' ? actor.departmentId || -1 : params.departmentId ? Number(params.departmentId) : undefined;
+
     // Determine date range for month YYYY-MM
     let startDate: Date;
     let endDate: Date;
@@ -25,7 +38,7 @@ export class ReportService {
 
     // Retrieve departments (with filtered department if provided)
     const departments = await prisma.department.findMany({
-      where: params.departmentId ? { id: Number(params.departmentId) } : undefined,
+      where: effectiveDepartmentId ? { id: effectiveDepartmentId } : undefined,
       include: {
         employees: {
           where: { status: 'ACTIVE' },
@@ -44,7 +57,7 @@ export class ReportService {
         },
         employee: {
           status: 'ACTIVE',
-          ...(params.departmentId ? { departmentId: Number(params.departmentId) } : {}),
+          ...(effectiveDepartmentId ? { departmentId: effectiveDepartmentId } : {}),
         },
       },
       select: {
@@ -100,8 +113,6 @@ export class ReportService {
     });
 
     const results = Array.from(departmentStatsMap.values()).map((stats) => {
-      // Attendance rate = (PRESENT + LATE) / (Total Records - ON_LEAVE)
-      // Excludes approved on-leave from the denominator of expected working shifts
       const expectedWorkingDays = stats.totalRecords - stats.onLeaveCount;
       const onDuty = stats.presentCount + stats.lateCount;
       const attendanceRate =
@@ -131,9 +142,16 @@ export class ReportService {
    * Absenteeism report:
    * Ranked employees by count of ABSENT + LATE records in date range descending.
    * Explicitly excludes ON_LEAVE since planned leaves are not infractions.
-   * Supports employee name/email filtering via search parameter.
+   * Scoped to MANAGER's department if actor is a manager.
    */
-  static async getAbsenteeismReport(params: { from?: string; to?: string; limit?: number; search?: string }) {
+  static async getAbsenteeismReport(
+    params: { from?: string; to?: string; limit?: number; search?: string },
+    actor?: AuthUserPayload
+  ) {
+    if (actor?.role === 'STAFF') {
+      throw new AppError('Staff members do not have access to analytical reports', 403);
+    }
+
     const limit = Math.max(1, Math.min(100, params.limit || 10));
 
     let startDate: Date;
@@ -158,6 +176,10 @@ export class ReportService {
     const employeeFilter: any = {
       status: 'ACTIVE',
     };
+
+    if (actor?.role === 'MANAGER') {
+      employeeFilter.departmentId = actor.departmentId || -1;
+    }
 
     if (params.search && params.search.trim()) {
       const query = params.search.trim();
@@ -254,19 +276,28 @@ export class ReportService {
 
   /**
    * Daily Roster report:
-   * All ShiftAssignments for a given date, grouped by Department then Shift, showing employee name and role.
-   * Supports employee name/email filtering.
+   * All ShiftAssignments for a given date, grouped by Department then Shift.
+   * Scoped to MANAGER's department if actor is a manager.
    */
-  static async getRosterReport(dateStr?: string, search?: string) {
+  static async getRosterReport(dateStr?: string, search?: string, actor?: AuthUserPayload) {
     const targetDate = dateStr ? toDateOnly(dateStr) : toDateOnly(new Date());
 
     const where: any = {
       date: targetDate,
     };
 
+    if (actor?.role === 'STAFF') {
+      where.employeeId = actor.employeeId || -1;
+    } else if (actor?.role === 'MANAGER') {
+      where.employee = {
+        departmentId: actor.departmentId || -1,
+      };
+    }
+
     if (search && search.trim()) {
       const query = search.trim();
       where.employee = {
+        ...(where.employee || {}),
         OR: [
           { firstName: { contains: query, mode: 'insensitive' } },
           { lastName: { contains: query, mode: 'insensitive' } },

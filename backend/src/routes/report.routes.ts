@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { ReportController } from '../controllers/report.controller.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
+router.use(requireRole('ADMIN', 'MANAGER'));
 
 /**
  * @swagger
@@ -59,7 +63,7 @@ router.get('/attendance-rate', ReportController.getAttendanceRate);
  *           default: 10
  *     responses:
  *       200:
- *         description: Ranked list of employees with highest absence and tardiness infractions
+ *         description: Top employees ranked by attendance infractions
  */
 router.get('/absenteeism', ReportController.getAbsenteeism);
 
@@ -67,7 +71,7 @@ router.get('/absenteeism', ReportController.getAbsenteeism);
  * @swagger
  * /api/reports/roster:
  *   get:
- *     summary: Daily shift roster grouped by Department and Shift
+ *     summary: Shift assignments grouped by Department and Shift for a given date
  *     tags: [Reports]
  *     parameters:
  *       - in: query
@@ -78,7 +82,7 @@ router.get('/absenteeism', ReportController.getAbsenteeism);
  *           example: "2026-08-26"
  *     responses:
  *       200:
- *         description: Grouped shift schedule and real-time attendance status
+ *         description: Grouped hierarchy of department shifts and assigned staff
  */
 router.get('/roster', ReportController.getRoster);
 

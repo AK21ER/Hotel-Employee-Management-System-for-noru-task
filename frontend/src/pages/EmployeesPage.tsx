@@ -119,6 +119,12 @@ export const EmployeesPage: React.FC = () => {
     setIsModalOpen(true);
   };
 
+  const [createdAccountInfo, setCreatedAccountInfo] = useState<{
+    name: string;
+    email: string;
+    tempPassword?: string;
+  } | null>(null);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -132,7 +138,7 @@ export const EmployeesPage: React.FC = () => {
         setSuccessMsg(msg);
         toast.success(msg, 'Employee Updated');
       } else {
-        await api.createEmployee({
+        const res = await api.createEmployee({
           ...formData,
           departmentId: Number(formData.departmentId),
           roleId: Number(formData.roleId),
@@ -140,6 +146,14 @@ export const EmployeesPage: React.FC = () => {
         const msg = `Employee ${formData.firstName} ${formData.lastName} created successfully.`;
         setSuccessMsg(msg);
         toast.success(msg, 'Employee Created');
+
+        if (res.tempPassword) {
+          setCreatedAccountInfo({
+            name: `${formData.firstName} ${formData.lastName}`,
+            email: formData.email,
+            tempPassword: res.tempPassword,
+          });
+        }
       }
       setIsModalOpen(false);
       fetchData();
@@ -569,6 +583,66 @@ export const EmployeesPage: React.FC = () => {
           </div>
         </div>
       </Modal>
+
+      {/* Account Provisioned Modal */}
+      {createdAccountInfo && (
+        <Modal
+          isOpen={true}
+          onClose={() => setCreatedAccountInfo(null)}
+          title="Staff Account Auto-Provisioned"
+          maxWidth="max-w-md"
+        >
+          <div className="space-y-4">
+            <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-800">
+              A portal user account with role <strong className="font-bold">STAFF</strong> has been auto-created for{' '}
+              <strong className="font-bold">{createdAccountInfo.name}</strong>.
+            </div>
+
+            <div className="bg-stone-50 border border-stone-200 p-4 rounded-xl space-y-2.5">
+              <div>
+                <span className="text-[11px] font-semibold text-stone-500 uppercase">Login Email</span>
+                <div className="text-sm font-bold text-stone-800 font-mono select-all">
+                  {createdAccountInfo.email}
+                </div>
+              </div>
+              <div>
+                <span className="text-[11px] font-semibold text-stone-500 uppercase">Temporary Password</span>
+                <div className="flex items-center justify-between p-2 bg-white border border-stone-200 rounded-lg">
+                  <span className="text-base font-extrabold text-[#c29b38] font-mono tracking-wider select-all">
+                    {createdAccountInfo.tempPassword}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (createdAccountInfo.tempPassword) {
+                        navigator.clipboard.writeText(createdAccountInfo.tempPassword);
+                        toast.success('Temporary password copied to clipboard!');
+                      }
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold bg-[#c29b38]/15 hover:bg-[#c29b38]/25 text-[#876420] rounded-md transition"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-500 leading-relaxed">
+              This temporary password is shown <strong>once</strong> and will require the employee to change it upon their first sign-in.
+            </p>
+
+            <div className="flex justify-end pt-2">
+              <button
+                type="button"
+                onClick={() => setCreatedAccountInfo(null)}
+                className="px-5 py-2 rounded-xl text-xs font-bold text-white bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#d1ab45] hover:to-[#b38c2c] transition shadow"
+              >
+                Understood & Close
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 };

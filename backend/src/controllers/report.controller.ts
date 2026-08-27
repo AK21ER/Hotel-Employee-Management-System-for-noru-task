@@ -8,10 +8,13 @@ export class ReportController {
   static async getAttendanceRate(req: Request, res: Response, next: NextFunction) {
     try {
       const { department, month } = req.query;
-      const result = await ReportService.getAttendanceRateReport({
-        departmentId: department ? Number(department) : undefined,
-        month: month ? String(month) : undefined,
-      });
+      const result = await ReportService.getAttendanceRateReport(
+        {
+          departmentId: department ? Number(department) : undefined,
+          month: month ? String(month) : undefined,
+        },
+        req.user
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -24,12 +27,15 @@ export class ReportController {
   static async getAbsenteeism(req: Request, res: Response, next: NextFunction) {
     try {
       const { search, from, to, limit } = req.query;
-      const result = await ReportService.getAbsenteeismReport({
-        search: search ? String(search) : undefined,
-        from: from ? String(from) : undefined,
-        to: to ? String(to) : undefined,
-        limit: limit ? Number(limit) : 10,
-      });
+      const result = await ReportService.getAbsenteeismReport(
+        {
+          search: search ? String(search) : undefined,
+          from: from ? String(from) : undefined,
+          to: to ? String(to) : undefined,
+          limit: limit ? Number(limit) : 10,
+        },
+        req.user
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -44,7 +50,8 @@ export class ReportController {
       const { date, search } = req.query;
       const result = await ReportService.getRosterReport(
         date ? String(date) : undefined,
-        search ? String(search) : undefined
+        search ? String(search) : undefined,
+        req.user
       );
       res.status(200).json(result);
     } catch (error) {

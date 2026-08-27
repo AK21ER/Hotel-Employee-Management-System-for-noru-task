@@ -78,6 +78,18 @@ erDiagram
         DateTime updatedAt
     }
 
+    User ||--o| Employee : "linked to"
+
+    User {
+        Int id PK
+        String email UK
+        String passwordHash
+        UserRole role
+        Boolean mustChangePassword
+        Int employeeId FK,UK
+        DateTime createdAt
+    }
+
     ShiftAssignment {
         Int id PK
         Int employeeId FK
@@ -98,9 +110,9 @@ erDiagram
 
 ### Core Design Decisions
 
-1. **Single Department & Role FKs with Evolutionary Path:**
-   - *Current Design:* `Employee` holds direct foreign keys to `Department` and `Role`. This deliberate scope decision ensures zero overhead and clean queries for a 1-day system.
-   - *Future Evolution:* In a larger enterprise scale, this would evolve to `EmployeeDepartmentHistory` and `EmployeeRoleHistory` tables with `startDate`, `endDate`, and `isCurrent` flags to track promotions and inter-department transfers across time.
+1. **Role-Based Authentication & Departmental Scoping:**
+   - Employs secure, HTTP-only cookie-based JWT authentication (`sameSite: 'lax'`, `httpOnly: true`).
+   - Granular authorization scopes are strictly verified inside the backend service layer rather than relying on client input.
 2. **Soft-Delete for Employees (`status: INACTIVE`):**
    - When an employee departs or is deleted, their record is updated to `status: INACTIVE` instead of executing a physical SQL `DELETE`. This preserves historical attendance, timesheet, and shift reporting data integrity without orphaned records.
 3. **Compound Unique Constraints at the Database Level:**
@@ -112,14 +124,38 @@ erDiagram
 
 ---
 
-## 3. Important Decisions & Tradeoffs
+## 3. Role-Based Access Control (RBAC) & Authentication
 
-- **Framework & Simplicity:** Implemented with Express + TypeScript for clear architecture and direct control over error mapping.
-- **Auto-Derived Late Logic as a Pure Function:** `deriveAttendanceStatus()` in `attendance.service.ts` is decoupled from HTTP concerns and database state, making it fast and unit-testable in milliseconds.
-- **Pagination Defaults:** All list endpoints (`/api/employees`, `/api/attendance`, `/api/shift-assignments`) support `?page=&pageSize=`. Even with small sample datasets, this ensures API contract scalability and prevents unbounded memory consumption in production.
-- **Tradeoffs for 1-Day Budget:**
-  - *Authentication & RBAC:* Auth is omitted in accordance with prompt guidelines. In production, JWT middleware with role-based permissions (`ADMIN`, `HR_MANAGER`, `STAFF`) would protect sensitive routes.
-  - *Multi-department Shift Coverage:* Currently staff belong to one home department. A hotel with cross-trained banquet servers could extend `ShiftAssignment` to allow assigning staff to shifts outside their primary department.
+### Demo Credentials Table
+
+| Role | Email | Password | Access Scope |
+| :--- | :--- | :--- | :--- |
+| **Super Admin** | `admin@noruhotel.com` | `Admin123!` | Full system control: Departments, Roles, Shifts, Employees, Scheduling, Attendance, All Reports, User Provisioning. |
+| **Front Desk Manager** | `manager.frontdesk@noruhotel.com` | `Manager123!` | Front Desk employees only: view/edit staff, assign shifts, manage punches, department analytics. |
+| **Housekeeping Manager** | `manager.housekeeping@noruhotel.com` | `Manager123!` | Housekeeping staff only: department scheduling, attendance tracking, department absenteeism. |
+| **Kitchen & F&B Manager** | `manager.kitchen@noruhotel.com` | `Manager123!` | Kitchen staff only: kitchen shift assignments, attendance logs, department reports. |
+| **Maintenance Manager** | `manager.maintenance@noruhotel.com` | `Manager123!` | Maintenance staff only: technician shifts, punch logs, department reports. |
+| **Staff Member (Elena)** | `elena.r@hotelhrms.com` | `Staff123!` | Self-service only: View personal shift schedule, log personal attendance punch in/out. |
+
+### Staff Auto-Provisioning & Temporary Password Flow
+- When an employee is created via `POST /api/employees`, a linked `User` record with role `STAFF` and `mustChangePassword: true` is automatically provisioned with a secure, randomly generated temporary password (hashed with `bcrypt`).
+- The temporary password is returned **once** in the API response payload and displayed in an interactive copy modal. (In a production deployment, this would be replaced by an automated email-invitation or set-password magic link).
+
+### Forced Password Change Enforcement
+- Accounts flagged with `mustChangePassword === true` are intercepted by the `requireAuth` middleware and blocked from all protected operational endpoints with HTTP `403 Forbidden` (`PASSWORD_CHANGE_REQUIRED`), allowing only `/api/auth/change-password` and `/api/auth/logout`.
+- The frontend renders an unclosable password change overlay, preventing navigation until a new password has been configured.
+
+### Authorization Matrix
+
+| Resource / Endpoint | Super Admin (`ADMIN`) | Department Manager (`MANAGER`) | Staff Member (`STAFF`) |
+| :--- | :---: | :---: | :---: |
+| **Departments / Roles / Shifts CRUD** | Full Access | Read-Only Shifts | Read-Only Shifts |
+| **Employees List & Details** | All Departments | Own Department Only | Forbidden (403) |
+| **Employee Create / Edit / Deactivate** | All Departments | Own Department Only | Forbidden (403) |
+| **Shift Scheduling (`ShiftAssignment`)** | All Departments | Own Department Only | Own Schedule Only |
+| **Attendance Punch In / Out** | All Employees | Own Department Staff | Self Punch-In/Out Only |
+| **Reports & Analytics (Attendance Rate, Absenteeism, Roster)** | All Departments | Own Department Data | Forbidden (403) |
+| **User Registration (`/api/auth/register`)** | Manager / Admin Accounts | Forbidden (403) | Forbidden (403) |
 
 ---
 

@@ -73,6 +73,25 @@ export interface Attendance {
   } | null;
 }
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: 'ADMIN' | 'MANAGER' | 'STAFF';
+  mustChangePassword: boolean;
+  employeeId?: number | null;
+  departmentId?: number | null;
+  employee?: {
+    id: number;
+    firstName: string;
+    lastName: string;
+    email: string;
+    departmentId: number;
+    roleId: number;
+    department: { id: number; name: string };
+    role: { id: number; title: string };
+  } | null;
+}
+
 export interface AttendanceRateReportItem {
   departmentId: number;
   departmentName: string;
@@ -135,15 +154,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
   };
 
   try {
-    const response = await fetch(url, { ...options, headers });
-    const data = await response.json();
+    const response = await fetch(url, {
+      ...options,
+      headers,
+      credentials: 'include', // Ensure cookies are sent and received
+    });
+    const data = await response.json().catch(() => ({}));
 
     if (!response.ok) {
       const errorMessage =
         data.message ||
+        data.error ||
         (data.details ? data.details.map((d: any) => `${d.field}: ${d.message}`).join(', ') : 'Something went wrong');
-      toast.error(errorMessage);
-      throw new Error(errorMessage);
+
+      // Do not popup a toast for silent background 401 checks on /auth/me
+      if (!(endpoint === '/auth/me' && response.status === 401)) {
+        toast.error(errorMessage);
+      }
+
+      const error = new Error(errorMessage) as any;
+      error.status = response.status;
+      error.data = data;
+      throw error;
     }
 
     return data as T;
@@ -159,6 +191,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 }
 
 export const api = {
+  // Auth
+  login: (credentials: { email: string; password: string }) =>
+    request<{ user: AuthUser; message: string }>('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify(credentials),
+    }),
+  logout: () =>
+    request<{ message: string }>('/auth/logout', {
+      method: 'POST',
+    }),
+  getMe: () => request<{ user: AuthUser }>('/auth/me'),
+  changePassword: (data: { currentPassword: string; newPassword: string }) =>
+    request<{ message: string }>('/auth/change-password', {
+      method: 'PATCH',
+      body: JSON.stringify(data),
+    }),
+  registerUser: (data: { email: string; password: string; role: 'ADMIN' | 'MANAGER'; employeeId?: number }) =>
+    request<{ message: string; data: any }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
+
   // Employees
   getEmployees: (params?: { search?: string; departmentId?: number; roleId?: number; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
@@ -172,7 +226,7 @@ export const api = {
   },
   getEmployeeById: (id: number) => request<{ data: Employee }>(`/employees/${id}`),
   createEmployee: (data: Partial<Employee>) =>
-    request<{ message: string; data: Employee }>('/employees', {
+    request<{ message: string; data: Employee; tempPassword?: string }>('/employees', {
       method: 'POST',
       body: JSON.stringify(data),
     }),

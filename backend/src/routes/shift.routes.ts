@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { ShiftController, createShiftSchema, updateShiftSchema } from '../controllers/shift.controller.js';
 import { validateRequest } from '../middleware/validate.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -60,8 +63,15 @@ router.get('/', ShiftController.getAll);
  *     responses:
  *       201:
  *         description: Shift created
+ *       400:
+ *         description: Validation error
  */
-router.post('/', validateRequest({ body: createShiftSchema }), ShiftController.create);
+router.post(
+  '/',
+  requireRole('ADMIN'),
+  validateRequest({ body: createShiftSchema }),
+  ShiftController.create
+);
 
 /**
  * @swagger
@@ -114,7 +124,12 @@ router.get('/:id', ShiftController.getById);
  *       404:
  *         description: Shift not found
  */
-router.put('/:id', validateRequest({ body: updateShiftSchema }), ShiftController.update);
+router.put(
+  '/:id',
+  requireRole('ADMIN'),
+  validateRequest({ body: updateShiftSchema }),
+  ShiftController.update
+);
 
 /**
  * @swagger
@@ -134,6 +149,6 @@ router.put('/:id', validateRequest({ body: updateShiftSchema }), ShiftController
  *       404:
  *         description: Shift not found
  */
-router.delete('/:id', ShiftController.delete);
+router.delete('/:id', requireRole('ADMIN'), ShiftController.delete);
 
 export default router;

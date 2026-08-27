@@ -5,8 +5,11 @@ import {
   updateDepartmentSchema,
 } from '../controllers/department.controller.js';
 import { validateRequest } from '../middleware/validate.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -40,7 +43,7 @@ router.get('/', DepartmentController.getAll);
  * @swagger
  * /api/departments:
  *   post:
- *     summary: Create a department
+ *     summary: Create a new department
  *     tags: [Departments]
  *     requestBody:
  *       required: true
@@ -58,16 +61,23 @@ router.get('/', DepartmentController.getAll);
  *     responses:
  *       201:
  *         description: Department created
+ *       400:
+ *         description: Validation error
  *       409:
- *         description: Department name exists
+ *         description: Department name already exists
  */
-router.post('/', validateRequest({ body: createDepartmentSchema }), DepartmentController.create);
+router.post(
+  '/',
+  requireRole('ADMIN'),
+  validateRequest({ body: createDepartmentSchema }),
+  DepartmentController.create
+);
 
 /**
  * @swagger
  * /api/departments/{id}:
  *   get:
- *     summary: Get department details by ID
+ *     summary: Get department by ID
  *     tags: [Departments]
  *     parameters:
  *       - in: path
@@ -77,7 +87,7 @@ router.post('/', validateRequest({ body: createDepartmentSchema }), DepartmentCo
  *           type: integer
  *     responses:
  *       200:
- *         description: Department details
+ *         description: Department found
  *       404:
  *         description: Department not found
  */
@@ -112,7 +122,12 @@ router.get('/:id', DepartmentController.getById);
  *       404:
  *         description: Department not found
  */
-router.put('/:id', validateRequest({ body: updateDepartmentSchema }), DepartmentController.update);
+router.put(
+  '/:id',
+  requireRole('ADMIN'),
+  validateRequest({ body: updateDepartmentSchema }),
+  DepartmentController.update
+);
 
 /**
  * @swagger
@@ -132,6 +147,6 @@ router.put('/:id', validateRequest({ body: updateDepartmentSchema }), Department
  *       404:
  *         description: Department not found
  */
-router.delete('/:id', DepartmentController.delete);
+router.delete('/:id', requireRole('ADMIN'), DepartmentController.delete);
 
 export default router;

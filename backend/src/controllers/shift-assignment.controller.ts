@@ -12,7 +12,7 @@ export const createShiftAssignmentSchema = z.object({
 export class ShiftAssignmentController {
   static async create(req: Request, res: Response, next: NextFunction) {
     try {
-      const assignment = await ShiftAssignmentService.create(req.body);
+      const assignment = await ShiftAssignmentService.create(req.body, req.user);
       res.status(201).json({
         message: 'Shift assignment created successfully',
         data: assignment,
@@ -25,14 +25,17 @@ export class ShiftAssignmentController {
   static async getAll(req: Request, res: Response, next: NextFunction) {
     try {
       const { search, date, employeeId, departmentId, page, pageSize } = req.query;
-      const result = await ShiftAssignmentService.getAll({
-        search: search ? String(search) : undefined,
-        date: date ? String(date) : undefined,
-        employeeId: employeeId ? Number(employeeId) : undefined,
-        departmentId: departmentId ? Number(departmentId) : undefined,
-        page: page ? Number(page) : undefined,
-        pageSize: pageSize ? Number(pageSize) : undefined,
-      });
+      const result = await ShiftAssignmentService.getAll(
+        {
+          search: search ? String(search) : undefined,
+          date: date ? String(date) : undefined,
+          employeeId: employeeId ? Number(employeeId) : undefined,
+          departmentId: departmentId ? Number(departmentId) : undefined,
+          page: page ? Number(page) : undefined,
+          pageSize: pageSize ? Number(pageSize) : undefined,
+        },
+        req.user
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);
@@ -44,7 +47,7 @@ export class ShiftAssignmentController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      const assignment = await ShiftAssignmentService.getById(id);
+      const assignment = await ShiftAssignmentService.getById(id, req.user);
       if (!assignment) {
         throw new AppError('Shift assignment not found', 404);
       }
@@ -59,7 +62,7 @@ export class ShiftAssignmentController {
       const id = Number(req.params.id);
       if (isNaN(id)) throw new AppError('Invalid ID format', 400);
 
-      await ShiftAssignmentService.delete(id);
+      await ShiftAssignmentService.delete(id, req.user);
       res.status(200).json({
         message: 'Shift assignment deleted successfully',
       });

@@ -1,8 +1,11 @@
 import { Router } from 'express';
 import { EmployeeController, createEmployeeSchema, updateEmployeeSchema } from '../controllers/employee.controller.js';
 import { validateRequest } from '../middleware/validate.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -84,22 +87,29 @@ router.get('/', EmployeeController.getAll);
  *               hireDate:
  *                 type: string
  *                 format: date
+ *                 example: "2026-01-15"
  *               status:
  *                 type: string
  *                 enum: [ACTIVE, INACTIVE]
+ *                 default: ACTIVE
  *               departmentId:
  *                 type: integer
  *               roleId:
  *                 type: integer
  *     responses:
  *       201:
- *         description: Employee created successfully
+ *         description: Employee created successfully with auto-provisioned staff account
  *       400:
  *         description: Validation error
  *       409:
  *         description: Email already in use
  */
-router.post('/', validateRequest({ body: createEmployeeSchema }), EmployeeController.create);
+router.post(
+  '/',
+  requireRole('ADMIN', 'MANAGER'),
+  validateRequest({ body: createEmployeeSchema }),
+  EmployeeController.create
+);
 
 /**
  * @swagger
@@ -163,7 +173,12 @@ router.get('/:id', EmployeeController.getById);
  *       404:
  *         description: Employee not found
  */
-router.put('/:id', validateRequest({ body: updateEmployeeSchema }), EmployeeController.update);
+router.put(
+  '/:id',
+  requireRole('ADMIN', 'MANAGER'),
+  validateRequest({ body: updateEmployeeSchema }),
+  EmployeeController.update
+);
 
 /**
  * @swagger
@@ -183,6 +198,6 @@ router.put('/:id', validateRequest({ body: updateEmployeeSchema }), EmployeeCont
  *       404:
  *         description: Employee not found
  */
-router.delete('/:id', EmployeeController.delete);
+router.delete('/:id', requireRole('ADMIN', 'MANAGER'), EmployeeController.delete);
 
 export default router;

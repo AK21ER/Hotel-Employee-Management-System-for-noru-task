@@ -4,8 +4,11 @@ import {
   recordAttendanceSchema,
 } from '../controllers/attendance.controller.js';
 import { validateRequest } from '../middleware/validate.js';
+import { requireAuth, requireRole } from '../middleware/auth.js';
 
 const router = Router();
+
+router.use(requireAuth);
 
 /**
  * @swagger
@@ -62,7 +65,7 @@ router.get('/', AttendanceController.getAll);
  * @swagger
  * /api/attendance:
  *   post:
- *     summary: Record employee attendance (evaluates late grace period and auto-derives status)
+ *     summary: Record attendance punch with automated late status derivation
  *     tags: [Attendance]
  *     requestBody:
  *       required: true
@@ -137,6 +140,6 @@ router.get('/:id', AttendanceController.getById);
  *       404:
  *         description: Not found
  */
-router.delete('/:id', AttendanceController.delete);
+router.delete('/:id', requireRole('ADMIN', 'MANAGER'), AttendanceController.delete);
 
 export default router;
