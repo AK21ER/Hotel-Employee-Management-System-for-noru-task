@@ -202,3 +202,33 @@ Frontend Web Application will be available at: `http://localhost:3000`
 | `GET` | `/api/reports/attendance-rate` | Monthly per-department attendance rates & statistics |
 | `GET` | `/api/reports/absenteeism` | Top employees ranked by absent + late occurrences |
 | `GET` | `/api/reports/roster` | Shift roster for date grouped by department & shift |
+
+---
+
+## 7. Future Enhancements (Deliberately Scoped Out)
+
+The following capabilities were considered during system design but deliberately scoped out to keep this technical challenge submission concise, maintainable, and aligned with the 1-day time budget. Each item outlines the specific architectural component required for implementation:
+
+### 📅 Scheduling & Staffing
+- **Minimum staffing thresholds per shift (with understaffed shifts report):** Would require a `minStaffCount` field on the `Shift` model (or a `DepartmentShiftRequirement` table) and an aggregation service query comparing scheduled assignments against minimum requirements.
+- **Minimum rest period enforcement between consecutive shifts:** Would require a scheduling validation check in `ShiftAssignmentService` querying an employee's prior-day and next-day shift end/start times to enforce an 8-to-11 hour mandatory rest buffer (e.g., preventing a Morning shift immediately after a Night shift).
+- **Shift swap requests between employees:** Would require a `ShiftSwapRequest` model (`requesterId`, `targetEmployeeId`, `shiftAssignmentId`, `status: PENDING|APPROVED|REJECTED`) and an atomic Prisma `$transaction` swapping both assignment records upon manager approval.
+
+### ⏱️ Attendance & Payroll-Adjacent
+- **Computed hours-worked per employee from checkIn/checkOut:** Would require a timesheet service calculating the exact millisecond duration between `checkIn` and `checkOut` (deducting scheduled unpaid meal breaks) aggregated across weekly or monthly pay periods.
+- **Overtime detection against shift durations and weekly thresholds:** Would require an overtime rules engine comparing daily computed hours against scheduled shift length or weekly standard thresholds (e.g., > 40 hours/week).
+- **Escalation notifications for repeated lateness/absence patterns:** Would require an asynchronous worker (e.g., Redis/BullMQ queue or cron schedule) scanning rolling 30-day infraction counts and dispatching automated alerts to department heads upon reaching 3+ tardiness events.
+
+### 🌴 Leave Management Depth
+- **Leave balance & annual quota tracking per employee:** Would require an `EmployeeLeaveQuota` table (`employeeId`, `year`, `totalDays`, `usedDays`, `remainingDays`) and transactional validation rejecting leave requests that exceed remaining available balance.
+- **Differentiated leave types with distinct quota rules:** Would require expanding the schema with a `LeaveType` enum (`SICK`, `ANNUAL_VACATION`, `MATERNITY`, `UNPAID`) and separate allocation balances per category.
+
+### 👥 Employee Lifecycle
+- **Probation period logic derived from hireDate:** Would require a utility method checking whether `today < hireDate + 90 days`, optionally gating probation-restricted operations like paid leave requests.
+- **Full department and role transfer history:** Would require an `EmployeeAssignmentHistory` table with `employeeId`, `departmentId`, `roleId`, `effectiveStartDate`, and `effectiveEndDate` instead of directly overwriting foreign key columns.
+- **Explicit offboarding cascade flow:** Would require an offboarding routine wrapped in a Prisma `$transaction` that sets `Employee.status = INACTIVE` and automatically deletes or cancels all future `ShiftAssignment` records where `date > today`.
+
+### 📊 Reporting Depth
+- **Department headcount and attrition trends over time:** Would require querying historical hire dates, deactivation timestamps, and status change audit logs grouped by monthly and quarterly intervals.
+- **Shift coverage matrix across date ranges:** Would require a multi-day matrix query cross-referencing required staffing quotas against actual scheduled assignments across selected calendar weeks.
+
