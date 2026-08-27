@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Attendance, Employee, Department } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { toast } from '../context/ToastContext';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
@@ -15,6 +16,7 @@ import {
 } from 'lucide-react';
 
 export const AttendancePage: React.FC = () => {
+  const { user, isStaff } = useAuth();
   const [attendanceList, setAttendanceList] = useState<Attendance[]>([]);
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -44,7 +46,7 @@ export const AttendancePage: React.FC = () => {
     checkInTime: '07:15',
     checkOutTime: '15:00',
     includeCheckIn: true,
-    includeCheckOut: true,
+    includeCheckOut: false,
     explicitStatus: '',
   });
 
@@ -63,8 +65,8 @@ export const AttendancePage: React.FC = () => {
           page,
           pageSize: 15,
         }),
-        api.getEmployees({ status: 'ACTIVE', pageSize: 100 }),
-        api.getDepartments(),
+        isStaff ? Promise.resolve({ data: [] }) : api.getEmployees({ status: 'ACTIVE', pageSize: 100 }).catch(() => ({ data: [] })),
+        isStaff ? Promise.resolve({ data: [] }) : api.getDepartments().catch(() => ({ data: [] })),
       ]);
 
       setAttendanceList(attRes.data || []);
@@ -87,9 +89,9 @@ export const AttendancePage: React.FC = () => {
 
   const handleOpenRecord = () => {
     setRecordForm({
-      employeeId: employees[0]?.id || 0,
+      employeeId: isStaff ? user?.employeeId || 0 : employees[0]?.id || 0,
       date: new Date().toISOString().split('T')[0],
-      checkInTime: '07:15',
+      checkInTime: new Date().toTimeString().slice(0, 5),
       checkOutTime: '15:00',
       includeCheckIn: true,
       includeCheckOut: false,
@@ -101,8 +103,8 @@ export const AttendancePage: React.FC = () => {
   const handleRecordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
-      let checkInIso: string | null = null;
-      let checkOutIso: string | null = null;
+      let checkInIso: string | undefined = undefined;
+      let checkOutIso: string | undefined = undefined;
 
       if (recordForm.includeCheckIn && recordForm.checkInTime) {
         checkInIso = `${recordForm.date}T${recordForm.checkInTime}:00`;
@@ -111,12 +113,14 @@ export const AttendancePage: React.FC = () => {
         checkOutIso = `${recordForm.date}T${recordForm.checkOutTime}:00`;
       }
 
+      const targetEmpId = isStaff ? (user?.employeeId || 0) : Number(recordForm.employeeId);
+
       const res = await api.recordAttendance({
-        employeeId: Number(recordForm.employeeId),
+        employeeId: targetEmpId,
         date: recordForm.date,
         checkIn: checkInIso,
         checkOut: checkOutIso,
-        status: recordForm.explicitStatus || null,
+        status: isStaff ? null : (recordForm.explicitStatus || null),
       });
 
       const msg = `Attendance logged for ${res.data.employee.firstName} ${res.data.employee.lastName} (Status: ${res.data.status})`;
@@ -138,11 +142,13 @@ export const AttendancePage: React.FC = () => {
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#c29b38]"></span>
             <h1 className="text-2xl font-extrabold text-[#1d140d] tracking-tight">
-              Attendance & Time Tracking
+              {isStaff ? 'My Attendance Records' : 'Attendance & Time Tracking'}
             </h1>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Automated punctuality derivation, punch-in/out logs, and daily compliance.
+            {isStaff
+              ? 'Record your shift punch in/out and view your daily punctuality logs.'
+              : 'Automated punctuality derivation, punch-in/out logs, and daily compliance.'}
           </p>
         </div>
         <button
@@ -150,7 +156,7 @@ export const AttendancePage: React.FC = () => {
           className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white text-sm font-bold rounded-xl shadow-md shadow-[#c29b38]/20 transition transform active:scale-95 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
-          <span>Log Attendance / Punch</span>
+          <span>{isStaff ? 'Punch In / Clock Out' : 'Log Attendance / Punch'}</span>
         </button>
       </div>
 
@@ -356,26 +362,33 @@ export const AttendancePage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title="Record Staff Attendance"
+        title={isStaff ? 'Punch In / Out' : 'Record Staff Attendance'}
       >
         <form onSubmit={handleRecordSubmit} className="space-y-4">
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
               Employee *
             </label>
-            <select
-              required
-              value={recordForm.employeeId}
-              onChange={(e) => setRecordForm({ ...recordForm, employeeId: Number(e.target.value) })}
-              className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
-            >
-              <option value={0} disabled>Select Employee</option>
-              {employees.map((emp) => (
-                <option key={emp.id} value={emp.id}>
-                  {emp.firstName} {emp.lastName} ({emp.department.name})
-                </option>
-              ))}
-            </select>
+            {isStaff ? (
+              <div className="w-full px-3.5 py-2.5 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm font-bold text-stone-800 flex items-center justify-between">
+                <span>{user?.employee?.firstName} {user?.employee?.lastName}</span>
+                <span className="text-xs text-[#876420] font-normal">{user?.employee?.department?.name}</span>
+              </div>
+            ) : (
+              <select
+                required
+                value={recordForm.employeeId}
+                onChange={(e) => setRecordForm({ ...recordForm, employeeId: Number(e.target.value) })}
+                className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+              >
+                <option value={0} disabled>Select Employee</option>
+                {employees.map((emp) => (
+                  <option key={emp.id} value={emp.id}>
+                    {emp.firstName} {emp.lastName} ({emp.department.name})
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           <div>
@@ -433,22 +446,24 @@ export const AttendancePage: React.FC = () => {
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
-              Explicit Status Override (Optional)
-            </label>
-            <select
-              value={recordForm.explicitStatus}
-              onChange={(e) => setRecordForm({ ...recordForm, explicitStatus: e.target.value })}
-              className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
-            >
-              <option value="">Auto-Derive (Recommended)</option>
-              <option value="ON_LEAVE">ON LEAVE</option>
-              <option value="ABSENT">ABSENT</option>
-              <option value="PRESENT">PRESENT</option>
-              <option value="LATE">LATE</option>
-            </select>
-          </div>
+          {!isStaff && (
+            <div>
+              <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
+                Explicit Status Override (Optional)
+              </label>
+              <select
+                value={recordForm.explicitStatus}
+                onChange={(e) => setRecordForm({ ...recordForm, explicitStatus: e.target.value })}
+                className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+              >
+                <option value="">Auto-Derive (Recommended)</option>
+                <option value="ON_LEAVE">ON LEAVE</option>
+                <option value="ABSENT">ABSENT</option>
+                <option value="PRESENT">PRESENT</option>
+                <option value="LATE">LATE</option>
+              </select>
+            </div>
+          )}
 
           <div className="flex items-center justify-end space-x-3 pt-4 border-t border-[#ecdcb7]/60">
             <button

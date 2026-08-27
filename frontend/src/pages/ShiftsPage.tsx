@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Shift, ShiftAssignment, Employee, Department } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { toast } from '../context/ToastContext';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
@@ -17,6 +18,7 @@ import {
 } from 'lucide-react';
 
 export const ShiftsPage: React.FC = () => {
+  const { user, isAdmin, isStaff } = useAuth();
   const [activeSubTab, setActiveSubTab] = useState<'schedule' | 'definitions'>('schedule');
 
   // Shifts definitions
@@ -68,7 +70,7 @@ export const ShiftsPage: React.FC = () => {
     try {
       setLoadingAssignments(true);
       const res = await api.getShiftAssignments({
-        search: filterSearch.trim() || undefined,
+        search: isStaff ? user?.employee?.firstName : filterSearch.trim() || undefined,
         date: filterDate || undefined,
         departmentId: filterDept,
         page: assignmentPage,
@@ -89,8 +91,8 @@ export const ShiftsPage: React.FC = () => {
   const fetchMetadata = async () => {
     try {
       const [empRes, deptRes] = await Promise.all([
-        api.getEmployees({ status: 'ACTIVE', pageSize: 100 }),
-        api.getDepartments(),
+        api.getEmployees({ status: 'ACTIVE', pageSize: 100 }).catch(() => ({ data: [] })),
+        api.getDepartments().catch(() => ({ data: [] })),
       ]);
       setEmployees(empRes.data || []);
       setDepartments(deptRes.data || []);
@@ -101,18 +103,19 @@ export const ShiftsPage: React.FC = () => {
 
   useEffect(() => {
     fetchShifts();
-    fetchMetadata();
-  }, []);
+    if (!isStaff) {
+      fetchMetadata();
+    }
+  }, [isStaff]);
 
   useEffect(() => {
-    if (activeSubTab === 'schedule') {
-      fetchAssignments();
-    }
-  }, [filterDate, filterDept, filterSearch, assignmentPage, activeSubTab]);
+    fetchAssignments();
+  }, [filterDate, filterDept, filterSearch, assignmentPage]);
 
   // Handle shift definition CRUD
   const handleSaveShift = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!isAdmin) return;
     try {
       if (editingShift) {
         await api.updateShift(editingShift.id, shiftForm);
@@ -134,6 +137,7 @@ export const ShiftsPage: React.FC = () => {
   };
 
   const handleDeleteShift = async (s: Shift) => {
+    if (!isAdmin) return;
     if (!window.confirm(`Delete shift "${s.name}"?`)) return;
     try {
       await api.deleteShift(s.id);
@@ -150,6 +154,7 @@ export const ShiftsPage: React.FC = () => {
   // Handle shift assignment
   const handleAssignShift = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isStaff) return;
     try {
       await api.createShiftAssignment({
         employeeId: Number(assignForm.employeeId),
@@ -168,6 +173,7 @@ export const ShiftsPage: React.FC = () => {
   };
 
   const handleDeleteAssignment = async (id: number) => {
+    if (isStaff) return;
     if (!window.confirm('Remove this shift assignment?')) return;
     try {
       await api.deleteShiftAssignment(id);
@@ -189,15 +195,17 @@ export const ShiftsPage: React.FC = () => {
           <div className="flex items-center space-x-2">
             <span className="w-2.5 h-2.5 rounded-full bg-[#c29b38]"></span>
             <h1 className="text-2xl font-extrabold text-[#1d140d] tracking-tight">
-              Shifts & Work Schedules
+              {isStaff ? 'My Assigned Shifts & Work Hours' : 'Shifts & Work Schedules'}
             </h1>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Manage 24/7 hotel operational shifts and daily staff assignments.
+            {isStaff
+              ? 'View your personal daily shift schedule, reporting times, and operational hours.'
+              : 'Manage 24/7 hotel operational shifts and daily staff assignments.'}
           </p>
         </div>
         <div className="flex items-center space-x-2">
-          {activeSubTab === 'schedule' ? (
+          {!isStaff && activeSubTab === 'schedule' && (
             <button
               onClick={() => {
                 setAssignForm({
@@ -212,7 +220,8 @@ export const ShiftsPage: React.FC = () => {
               <UserCheck className="w-4 h-4" />
               <span>Schedule Shift</span>
             </button>
-          ) : (
+          )}
+          {isAdmin && activeSubTab === 'definitions' && (
             <button
               onClick={() => {
                 setEditingShift(null);
@@ -238,7 +247,7 @@ export const ShiftsPage: React.FC = () => {
               : 'border-transparent text-slate-500 hover:text-[#c29b38]'
           }`}
         >
-          Daily Schedule & Assignments
+          {isStaff ? 'My Schedule' : 'Daily Schedule & Assignments'}
         </button>
         <button
           onClick={() => setActiveSubTab('definitions')}
