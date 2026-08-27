@@ -36,14 +36,18 @@ export class ShiftAssignmentService {
       throw new AppError(`Cannot assign a shift to inactive employee ${employee.firstName} ${employee.lastName}.`, 400);
     }
 
-    // Check shift exists
-    const shift = await prisma.shift.findUnique({
-      where: { id: data.shiftId },
-      select: { id: true },
+    // Check if assignment already exists for (employeeId, normalizedDate)
+    const existing = await prisma.shiftAssignment.findUnique({
+      where: {
+        employeeId_date: {
+          employeeId: data.employeeId,
+          date: normalizedDate,
+        },
+      },
     });
 
-    if (!shift) {
-      throw new AppError(`Shift with ID ${data.shiftId} not found`, 404);
+    if (existing) {
+      throw new AppError('A shift assignment already exists for this employee on this date', 409);
     }
 
     return prisma.shiftAssignment.create({
