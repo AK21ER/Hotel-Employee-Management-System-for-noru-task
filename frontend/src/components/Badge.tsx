@@ -56,6 +56,13 @@ export const Badge: React.FC<BadgeProps> = ({ status, variant = 'status' }) => {
           ON LEAVE
         </span>
       );
+    case 'PARTIAL_PRESENT':
+      return (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-purple-50 text-purple-700 border border-purple-200">
+          <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mr-1.5"></span>
+          PARTIAL PRESENT
+        </span>
+      );
     default:
       return (
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-slate-100 text-slate-600 border border-slate-200">

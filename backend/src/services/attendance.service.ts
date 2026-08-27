@@ -3,7 +3,9 @@ import prisma from '../lib/prisma.js';
 
 export interface DeriveStatusInput {
   checkIn?: Date | string | null;
+  checkOut?: Date | string | null;
   shiftStartTime?: string | null; // e.g. "07:00"
+  shiftEndTime?: string | null;   // e.g. "15:00"
   explicitStatus?: AttendanceStatus | null;
 }
 
@@ -12,6 +14,7 @@ export interface DeriveStatusInput {
  * Rules:
  * - If explicitStatus is ON_LEAVE, it is preserved.
  * - If no checkIn provided and status not explicitly set -> ABSENT.
+ * - If checkOut provided and before shiftEndTime -> PARTIAL_PRESENT.
  * - If checkIn provided with a shiftStartTime:
  *     - If checkIn > shiftStartTime + 10 minutes grace period -> LATE.
  *     - Otherwise -> PRESENT.
@@ -24,6 +27,32 @@ export function deriveAttendanceStatus(input: DeriveStatusInput): AttendanceStat
 
   if (!input.checkIn) {
     return input.explicitStatus ?? 'ABSENT';
+  }
+
+  // Rule: Check if check-out time is before scheduled shift end time (Partial Present)
+  if (input.checkOut && input.shiftEndTime) {
+    const [endHoursStr, endMinutesStr] = input.shiftEndTime.split(':');
+    const endHours = parseInt(endHoursStr, 10);
+    const endMinutes = parseInt(endMinutesStr, 10);
+
+    if (!isNaN(endHours) && !isNaN(endMinutes)) {
+      const shiftEndTotalMinutes = endHours * 60 + endMinutes;
+      const checkOutDate = typeof input.checkOut === 'string' ? new Date(input.checkOut) : input.checkOut;
+      const checkOutHours = checkOutDate.getHours();
+      const checkOutMinutes = checkOutDate.getMinutes();
+      const checkOutTotalMinutes = checkOutHours * 60 + checkOutMinutes;
+
+      let diffEndMinutes = checkOutTotalMinutes - shiftEndTotalMinutes;
+      if (diffEndMinutes < -720) {
+        diffEndMinutes += 1440;
+      } else if (diffEndMinutes > 720) {
+        diffEndMinutes -= 1440;
+      }
+
+      if (diffEndMinutes < 0) {
+        return 'PARTIAL_PRESENT';
+      }
+    }
   }
 
   if (!input.shiftStartTime) {
@@ -41,9 +70,6 @@ export function deriveAttendanceStatus(input: DeriveStatusInput): AttendanceStat
   const shiftStartTotalMinutes = shiftHours * 60 + shiftMinutes;
 
   const checkInDate = typeof input.checkIn === 'string' ? new Date(input.checkIn) : input.checkIn;
-  
-  // Extract hours and minutes from checkIn (using local or UTC depending on representation)
-  // Support standard JS Date
   const checkInHours = checkInDate.getHours();
   const checkInMinutes = checkInDate.getMinutes();
   const checkInTotalMinutes = checkInHours * 60 + checkInMinutes;
@@ -165,9 +191,12 @@ export class AttendanceService {
     });
 
     const shiftStartTime = assignment?.shift?.startTime ?? null;
+    const shiftEndTime = assignment?.shift?.endTime ?? null;
     const finalStatus = deriveAttendanceStatus({
       checkIn: data.checkIn,
+      checkOut: data.checkOut,
       shiftStartTime,
+      shiftEndTime,
       explicitStatus: data.status,
     });
 
@@ -248,6 +277,11 @@ export class AttendanceService {
           date: today,
         },
       },
+      include: {
+        shiftAssignment: {
+          include: { shift: true },
+        },
+      },
     });
 
     if (!existing) {
@@ -264,10 +298,23 @@ export class AttendanceService {
       throw new AppError("Check-out time must be later than check-in time.", 400);
     }
 
+    // Determine shiftEndTime and recalculate status (PARTIAL_PRESENT if clocking out under shift end time)
+    const shiftStartTime = existing.shiftAssignment?.shift?.startTime ?? null;
+    const shiftEndTime = existing.shiftAssignment?.shift?.endTime ?? null;
+
+    const newStatus = deriveAttendanceStatus({
+      checkIn: existing.checkIn,
+      checkOut: checkOutDate,
+      shiftStartTime,
+      shiftEndTime,
+      explicitStatus: existing.status === 'ON_LEAVE' ? 'ON_LEAVE' : null,
+    });
+
     const updated = await prisma.attendance.update({
       where: { id: existing.id },
       data: {
         checkOut: checkOutDate,
+        status: newStatus,
       },
       include: {
         employee: {

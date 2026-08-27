@@ -120,4 +120,5 @@ enum AttendanceStatus {
   ABSENT
   LATE
   ON_LEAVE
+  PARTIAL_PRESENT
 }

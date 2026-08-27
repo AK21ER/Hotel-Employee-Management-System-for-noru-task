@@ -81,6 +81,7 @@ export class ReportService {
         totalRecords: number;
         presentCount: number;
         lateCount: number;
+        partialPresentCount: number;
         absentCount: number;
         onLeaveCount: number;
         activeEmployees: number;
@@ -94,6 +95,7 @@ export class ReportService {
         totalRecords: 0,
         presentCount: 0,
         lateCount: 0,
+        partialPresentCount: 0,
         absentCount: 0,
         onLeaveCount: 0,
         activeEmployees: dept.employees.length,
@@ -108,13 +110,14 @@ export class ReportService {
       stats.totalRecords += 1;
       if (record.status === 'PRESENT') stats.presentCount += 1;
       else if (record.status === 'LATE') stats.lateCount += 1;
+      else if (record.status === 'PARTIAL_PRESENT') stats.partialPresentCount += 1;
       else if (record.status === 'ABSENT') stats.absentCount += 1;
       else if (record.status === 'ON_LEAVE') stats.onLeaveCount += 1;
     });
 
     const results = Array.from(departmentStatsMap.values()).map((stats) => {
       const expectedWorkingDays = stats.totalRecords - stats.onLeaveCount;
-      const onDuty = stats.presentCount + stats.lateCount;
+      const onDuty = stats.presentCount + stats.lateCount + stats.partialPresentCount;
       const attendanceRate =
         expectedWorkingDays > 0 ? Number(((onDuty / expectedWorkingDays) * 100).toFixed(2)) : 100.0;
       const onTimeRate =
@@ -123,8 +126,8 @@ export class ReportService {
       return {
         ...stats,
         expectedWorkingDays,
-        attendanceRate, // % on duty (present + late)
-        onTimeRate,     // % on time (present without late)
+        attendanceRate, // % on duty (present + late + partial)
+        onTimeRate,     // % on time (present without late/partial)
       };
     });
 

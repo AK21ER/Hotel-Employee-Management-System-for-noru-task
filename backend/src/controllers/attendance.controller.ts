@@ -11,7 +11,7 @@ export const recordAttendanceSchema = z
     date: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'date must be YYYY-MM-DD or ISO datetime')),
     checkIn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
     checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
-    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']).optional().nullable(),
+    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE', 'PARTIAL_PRESENT']).optional().nullable(),
   })
   .refine(
     (data) => {
@@ -51,7 +51,7 @@ export const correctAttendanceSchema = z
   .object({
     checkIn: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
     checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
-    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE']).optional().nullable(),
+    status: z.enum(['PRESENT', 'ABSENT', 'LATE', 'ON_LEAVE', 'PARTIAL_PRESENT']).optional().nullable(),
   })
   .refine(
     (data) => {

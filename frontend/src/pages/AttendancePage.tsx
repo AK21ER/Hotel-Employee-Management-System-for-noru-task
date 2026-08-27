@@ -377,6 +377,7 @@ export const AttendancePage: React.FC = () => {
             <option value="">All Statuses</option>
             <option value="PRESENT">PRESENT</option>
             <option value="LATE">LATE</option>
+            <option value="PARTIAL_PRESENT">PARTIAL PRESENT</option>
             <option value="ABSENT">ABSENT</option>
             <option value="ON_LEAVE">ON LEAVE</option>
           </select>
@@ -590,7 +591,7 @@ export const AttendancePage: React.FC = () => {
               </div>
               <div className="p-2 bg-white rounded-lg border border-[#ecdcb7]/70">
                 <span className="font-bold text-slate-800 block mb-0.5">🟠 Clock-Out Window</span>
-                <span>Active upon shift completion. Records total working hours against scheduled shift.</span>
+                <span>Clocking out on/after shift end logs full shift. Clocking out early derives <strong>PARTIAL PRESENT</strong>.</span>
               </div>
             </div>
           </div>
@@ -652,6 +653,7 @@ export const AttendancePage: React.FC = () => {
                 <option value="ABSENT">ABSENT</option>
                 <option value="PRESENT">PRESENT</option>
                 <option value="LATE">LATE</option>
+                <option value="PARTIAL_PRESENT">PARTIAL PRESENT</option>
               </select>
             </div>
           )}
@@ -747,6 +749,7 @@ export const AttendancePage: React.FC = () => {
               >
                 <option value="PRESENT">PRESENT</option>
                 <option value="LATE">LATE</option>
+                <option value="PARTIAL_PRESENT">PARTIAL PRESENT</option>
                 <option value="ABSENT">ABSENT</option>
                 <option value="ON_LEAVE">ON LEAVE</option>
               </select>

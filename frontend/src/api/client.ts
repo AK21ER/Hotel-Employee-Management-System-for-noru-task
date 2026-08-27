@@ -64,7 +64,7 @@ export interface Attendance {
   employeeId: number;
   employee: Employee;
   date: string;
-  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'ON_LEAVE';
+  status: 'PRESENT' | 'ABSENT' | 'LATE' | 'ON_LEAVE' | 'PARTIAL_PRESENT';
   checkIn: string | null;
   checkOut: string | null;
   shiftAssignmentId: number | null;
