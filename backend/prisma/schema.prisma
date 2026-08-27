@@ -45,6 +45,10 @@ model Employee {
   attendance   Attendance[]
   createdAt    DateTime          @default(now())
   updatedAt    DateTime          @updatedAt
+
+  @@index([departmentId])
+  @@index([roleId])
+  @@index([status])
 }
 
 enum EmployeeStatus {
@@ -62,6 +66,9 @@ model ShiftAssignment {
   attendance Attendance?
 
   @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([shiftId])
+  @@index([date, employeeId])
 }
 
 model Attendance {
@@ -76,6 +83,10 @@ model Attendance {
   shiftAssignment   ShiftAssignment? @relation(fields: [shiftAssignmentId], references: [id])
 
   @@unique([employeeId, date])
+  @@index([employeeId])
+  @@index([date, employeeId])
+  @@index([status])
+  @@index([date, status])
 }
 
 enum AttendanceStatus {

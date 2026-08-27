@@ -5,7 +5,7 @@ export class ReportService {
   /**
    * Flagship non-trivial query:
    * Calculates monthly per-department attendance rate (% present vs scheduled/recorded).
-   * Aggregates Attendance records joined with Employee and Department.
+   * Aggregates Attendance records joined with Employee and Department using Prisma.
    */
   static async getAttendanceRateReport(params: { month?: string; departmentId?: number }) {
     // Determine date range for month YYYY-MM
@@ -23,18 +23,19 @@ export class ReportService {
       endDate = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0, 23, 59, 59, 999));
     }
 
-    // Retrieve all departments (or filtered department)
+    // Retrieve departments (with filtered department if provided)
     const departments = await prisma.department.findMany({
-      where: params.departmentId ? { id: params.departmentId } : undefined,
+      where: params.departmentId ? { id: Number(params.departmentId) } : undefined,
       include: {
         employees: {
+          where: { status: 'ACTIVE' },
           select: { id: true },
         },
       },
       orderBy: { name: 'asc' },
     });
 
-    // Fetch attendance aggregates for the date range
+    // Fetch attendance records for the date range
     const attendanceRecords = await prisma.attendance.findMany({
       where: {
         date: {
@@ -43,10 +44,12 @@ export class ReportService {
         },
         employee: {
           status: 'ACTIVE',
-          ...(params.departmentId ? { departmentId: params.departmentId } : {}),
+          ...(params.departmentId ? { departmentId: Number(params.departmentId) } : {}),
         },
       },
-      include: {
+      select: {
+        id: true,
+        status: true,
         employee: {
           select: {
             id: true,
@@ -161,12 +164,25 @@ export class ReportService {
         status: {
           in: ['ABSENT', 'LATE'], // Excludes ON_LEAVE
         },
-      },
-      include: {
         employee: {
-          include: {
-            department: true,
-            role: true,
+          status: 'ACTIVE',
+        },
+      },
+      select: {
+        id: true,
+        status: true,
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            department: {
+              select: { name: true },
+            },
+            role: {
+              select: { title: true },
+            },
           },
         },
       },
@@ -235,15 +251,41 @@ export class ReportService {
       where: {
         date: targetDate,
       },
-      include: {
-        shift: true,
-        employee: {
-          include: {
-            department: true,
-            role: true,
+      select: {
+        id: true,
+        shift: {
+          select: {
+            id: true,
+            name: true,
+            startTime: true,
+            endTime: true,
           },
         },
-        attendance: true,
+        employee: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            email: true,
+            department: {
+              select: {
+                name: true,
+              },
+            },
+            role: {
+              select: {
+                title: true,
+              },
+            },
+          },
+        },
+        attendance: {
+          select: {
+            status: true,
+            checkIn: true,
+            checkOut: true,
+          },
+        },
       },
       orderBy: [
         { employee: { department: { name: 'asc' } } },
