@@ -404,6 +404,24 @@ export const AttendancePage: React.FC = () => {
             />
           </div>
 
+          {/* Shift Clock-in/out Window Guide */}
+          <div className="p-3.5 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-2 text-xs">
+            <div className="flex items-center justify-between font-bold text-[#876420]">
+              <span>Clock-In / Out Policy & Windows</span>
+              <span className="text-[10px] bg-[#c29b38]/15 px-2 py-0.5 rounded text-[#876420]">10m Grace</span>
+            </div>
+            <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600 pt-1">
+              <div className="p-2 bg-white rounded-lg border border-[#ecdcb7]/70">
+                <span className="font-bold text-slate-800 block mb-0.5">🟢 Clock-In Window</span>
+                <span>Opens 30m prior to shift. Arrivals up to +10m past shift start are <strong>PRESENT</strong>; beyond is <strong>LATE</strong>.</span>
+              </div>
+              <div className="p-2 bg-white rounded-lg border border-[#ecdcb7]/70">
+                <span className="font-bold text-slate-800 block mb-0.5">🟠 Clock-Out Window</span>
+                <span>Active upon shift completion. Records total working hours against scheduled shift.</span>
+              </div>
+            </div>
+          </div>
+
           {/* Time input area */}
           {isStaff ? (
             <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3 text-center">
