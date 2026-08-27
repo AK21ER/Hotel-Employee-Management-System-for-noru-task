@@ -1,7 +1,6 @@
-import { PrismaClient, EmployeeStatus, AttendanceStatus, UserRole } from '@prisma/client';
+import { EmployeeStatus, AttendanceStatus, UserRole } from '@prisma/client';
 import bcrypt from 'bcryptjs';
-
-const prisma = new PrismaClient();
+import prisma from '../src/lib/prisma.js';
 
 async function main() {
   console.log('🌱 Starting database seed with RBAC Users...');
