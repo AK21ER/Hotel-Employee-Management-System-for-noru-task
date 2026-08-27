@@ -11,6 +11,7 @@ import {
   AlertCircle,
   CheckCircle2,
   Sparkles,
+  Search,
 } from 'lucide-react';
 
 export const AttendancePage: React.FC = () => {
@@ -22,6 +23,7 @@ export const AttendancePage: React.FC = () => {
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   // Filters & Pagination
+  const [search, setSearch] = useState('');
   const [fromDate, setFromDate] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 7);
@@ -53,6 +55,7 @@ export const AttendancePage: React.FC = () => {
 
       const [attRes, empRes, deptRes] = await Promise.all([
         api.getAttendance({
+          search: search.trim() || undefined,
           from: fromDate || undefined,
           to: toDate || undefined,
           departmentId: deptFilter,
@@ -80,7 +83,7 @@ export const AttendancePage: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [fromDate, toDate, deptFilter, statusFilter, page]);
+  }, [fromDate, toDate, deptFilter, statusFilter, search, page]);
 
   const handleOpenRecord = () => {
     setRecordForm({
@@ -139,7 +142,7 @@ export const AttendancePage: React.FC = () => {
             </h1>
           </div>
           <p className="text-sm text-slate-500 mt-1">
-            Real-time punch records with automated 10-minute grace period late derivation.
+            Automated punctuality derivation, punch-in/out logs, and daily compliance.
           </p>
         </div>
         <button
@@ -147,23 +150,23 @@ export const AttendancePage: React.FC = () => {
           className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white text-sm font-bold rounded-xl shadow-md shadow-[#c29b38]/20 transition transform active:scale-95 self-start md:self-auto"
         >
           <Plus className="w-4 h-4" />
-          <span>Record Attendance</span>
+          <span>Log Attendance / Punch</span>
         </button>
       </div>
 
-      {/* Logic Callout */}
-      <div className="bg-gradient-to-r from-[#1d140d] via-[#2a1d12] to-[#1d140d] text-white p-4 sm:p-5 rounded-2xl shadow-sm flex items-start space-x-3.5 border border-[#c29b38]/40">
-        <div className="p-2 bg-[#c29b38]/20 border border-[#c29b38]/40 rounded-xl">
-          <Sparkles className="w-5 h-5 text-[#e3cfa1]" />
+      {/* Logic Callout Notice */}
+      <div className="p-4 bg-[#fdfbf7] border border-[#ecdcb7] rounded-2xl flex items-start space-x-3 text-xs text-slate-700 shadow-sm">
+        <div className="w-8 h-8 rounded-xl bg-[#c29b38] text-white flex items-center justify-center flex-shrink-0 mt-0.5 shadow-sm">
+          <Sparkles className="w-4 h-4" />
         </div>
-        <div className="text-xs space-y-1">
-          <span className="font-bold text-sm text-[#e3cfa1] block">Automated Status Derivation Rules</span>
-          <p className="text-[#e3cfa1]/90 leading-relaxed">
-            When check-in is logged, system compares timestamp with assigned shift start time.
-            Check-in within <strong>10 minutes grace period</strong> $\to$ <span className="text-emerald-400 font-semibold">PRESENT</span>.
-            Check-in &gt; 10 minutes late $\to$ <span className="text-amber-400 font-semibold">LATE</span> (overrides default).
-            No check-in provided $\to$ <span className="text-rose-400 font-semibold">ABSENT</span>.
-          </p>
+        <div className="leading-relaxed">
+          <span className="font-bold text-[#1d140d]">Automated Punctuality Grace Period: </span>
+          The system compares punch-in time against scheduled shift start. Arrivals within the{' '}
+          <strong className="text-[#876420]">10-minute grace window</strong> are marked{' '}
+          <strong className="text-emerald-700 font-bold">PRESENT</strong>. Check-ins beyond 10 minutes past shift start are automatically flagged as{' '}
+          <strong className="text-amber-700 font-bold">LATE</strong>. Missing check-ins default to{' '}
+          <strong className="text-rose-700 font-bold">ABSENT</strong>. Approved leaves are preserved as{' '}
+          <strong className="text-sky-700 font-bold">ON_LEAVE</strong>.
         </div>
       </div>
 
@@ -184,7 +187,24 @@ export const AttendancePage: React.FC = () => {
       )}
 
       {/* Filters Bar */}
-      <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+      <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div>
+          <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">Search Staff</label>
+          <div className="relative">
+            <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Name or email..."
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              className="w-full pl-9 pr-3 py-1.5 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+            />
+          </div>
+        </div>
+
         <div>
           <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider mb-1">From Date</label>
           <input

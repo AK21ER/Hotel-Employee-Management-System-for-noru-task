@@ -57,6 +57,7 @@ export class ShiftAssignmentService {
   }
 
   static async getAll(params: {
+    search?: string;
     date?: string;
     employeeId?: number;
     departmentId?: number;
@@ -77,10 +78,21 @@ export class ShiftAssignmentService {
       where.employeeId = params.employeeId;
     }
 
-    if (params.departmentId) {
-      where.employee = {
-        departmentId: params.departmentId,
-      };
+    if (params.departmentId || params.search) {
+      where.employee = {};
+
+      if (params.departmentId) {
+        where.employee.departmentId = params.departmentId;
+      }
+
+      if (params.search && params.search.trim()) {
+        const query = params.search.trim();
+        where.employee.OR = [
+          { firstName: { contains: query, mode: 'insensitive' } },
+          { lastName: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ];
+      }
     }
 
     const [total, data] = await Promise.all([

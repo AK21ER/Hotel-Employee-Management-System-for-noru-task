@@ -172,6 +172,7 @@ export class AttendanceService {
   }
 
   static async getAttendanceList(params: {
+    search?: string;
     employeeId?: number;
     departmentId?: number;
     from?: string;
@@ -190,10 +191,21 @@ export class AttendanceService {
       where.employeeId = params.employeeId;
     }
 
-    if (params.departmentId) {
-      where.employee = {
-        departmentId: params.departmentId,
-      };
+    if (params.departmentId || params.search) {
+      where.employee = {};
+
+      if (params.departmentId) {
+        where.employee.departmentId = params.departmentId;
+      }
+
+      if (params.search && params.search.trim()) {
+        const query = params.search.trim();
+        where.employee.OR = [
+          { firstName: { contains: query, mode: 'insensitive' } },
+          { lastName: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ];
+      }
     }
 
     if (params.status) {

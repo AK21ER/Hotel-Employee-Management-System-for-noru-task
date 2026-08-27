@@ -57,8 +57,9 @@ export class AttendanceController {
 
   static async getAll(req: Request, res: Response, next: NextFunction) {
     try {
-      const { employeeId, departmentId, from, to, status, page, pageSize } = req.query;
+      const { search, employeeId, departmentId, from, to, status, page, pageSize } = req.query;
       const result = await AttendanceService.getAttendanceList({
+        search: search ? String(search) : undefined,
         employeeId: employeeId ? Number(employeeId) : undefined,
         departmentId: departmentId ? Number(departmentId) : undefined,
         from: from ? String(from) : undefined,

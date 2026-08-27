@@ -13,6 +13,7 @@ import {
   Building2,
   AlertCircle,
   CheckCircle2,
+  Search,
 } from 'lucide-react';
 
 export const ShiftsPage: React.FC = () => {
@@ -29,6 +30,7 @@ export const ShiftsPage: React.FC = () => {
   const [loadingAssignments, setLoadingAssignments] = useState(true);
 
   // Filters for assignments
+  const [filterSearch, setFilterSearch] = useState('');
   const [filterDate, setFilterDate] = useState(new Date().toISOString().split('T')[0]);
   const [filterDept, setFilterDept] = useState<number | undefined>();
   const [assignmentPage, setAssignmentPage] = useState(1);
@@ -66,6 +68,7 @@ export const ShiftsPage: React.FC = () => {
     try {
       setLoadingAssignments(true);
       const res = await api.getShiftAssignments({
+        search: filterSearch.trim() || undefined,
         date: filterDate || undefined,
         departmentId: filterDept,
         page: assignmentPage,
@@ -102,8 +105,10 @@ export const ShiftsPage: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    fetchAssignments();
-  }, [filterDate, filterDept, assignmentPage]);
+    if (activeSubTab === 'schedule') {
+      fetchAssignments();
+    }
+  }, [filterDate, filterDept, filterSearch, assignmentPage, activeSubTab]);
 
   // Handle shift definition CRUD
   const handleSaveShift = async (e: React.FormEvent) => {
@@ -267,7 +272,20 @@ export const ShiftsPage: React.FC = () => {
       {activeSubTab === 'schedule' && (
         <div className="space-y-4">
           {/* Filters Bar */}
-          <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="relative">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+              <input
+                type="text"
+                placeholder="Search staff name..."
+                value={filterSearch}
+                onChange={(e) => {
+                  setFilterSearch(e.target.value);
+                  setAssignmentPage(1);
+                }}
+                className="w-full pl-9 pr-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+              />
+            </div>
             <div className="flex items-center space-x-2">
               <Calendar className="w-4 h-4 text-[#c29b38]" />
               <input

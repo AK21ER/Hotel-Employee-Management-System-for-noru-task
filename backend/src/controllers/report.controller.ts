@@ -19,12 +19,13 @@ export class ReportController {
   }
 
   /**
-   * GET /api/reports/absenteeism?from=&to=&limit=10
+   * GET /api/reports/absenteeism?from=&to=&limit=10&search=
    */
   static async getAbsenteeism(req: Request, res: Response, next: NextFunction) {
     try {
-      const { from, to, limit } = req.query;
+      const { search, from, to, limit } = req.query;
       const result = await ReportService.getAbsenteeismReport({
+        search: search ? String(search) : undefined,
         from: from ? String(from) : undefined,
         to: to ? String(to) : undefined,
         limit: limit ? Number(limit) : 10,
@@ -36,12 +37,15 @@ export class ReportController {
   }
 
   /**
-   * GET /api/reports/roster?date=YYYY-MM-DD
+   * GET /api/reports/roster?date=YYYY-MM-DD&search=
    */
   static async getRoster(req: Request, res: Response, next: NextFunction) {
     try {
-      const { date } = req.query;
-      const result = await ReportService.getRosterReport(date ? String(date) : undefined);
+      const { date, search } = req.query;
+      const result = await ReportService.getRosterReport(
+        date ? String(date) : undefined,
+        search ? String(search) : undefined
+      );
       res.status(200).json(result);
     } catch (error) {
       next(error);

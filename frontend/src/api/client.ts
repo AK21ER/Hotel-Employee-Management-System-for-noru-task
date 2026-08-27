@@ -253,8 +253,9 @@ export const api = {
     }),
 
   // Shift Assignments
-  getShiftAssignments: (params?: { date?: string; employeeId?: number; departmentId?: number; page?: number; pageSize?: number }) => {
+  getShiftAssignments: (params?: { search?: string; date?: string; employeeId?: number; departmentId?: number; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
+    if (params?.search) query.append('search', params.search);
     if (params?.date) query.append('date', params.date);
     if (params?.employeeId) query.append('employeeId', String(params.employeeId));
     if (params?.departmentId) query.append('departmentId', String(params.departmentId));
@@ -273,8 +274,9 @@ export const api = {
     }),
 
   // Attendance
-  getAttendance: (params?: { employeeId?: number; departmentId?: number; from?: string; to?: string; status?: string; page?: number; pageSize?: number }) => {
+  getAttendance: (params?: { search?: string; employeeId?: number; departmentId?: number; from?: string; to?: string; status?: string; page?: number; pageSize?: number }) => {
     const query = new URLSearchParams();
+    if (params?.search) query.append('search', params.search);
     if (params?.employeeId) query.append('employeeId', String(params.employeeId));
     if (params?.departmentId) query.append('departmentId', String(params.departmentId));
     if (params?.from) query.append('from', params.from);
@@ -309,8 +311,9 @@ export const api = {
       `/reports/attendance-rate?${query.toString()}`
     );
   },
-  getAbsenteeismReport: (params?: { from?: string; to?: string; limit?: number }) => {
+  getAbsenteeismReport: (params?: { search?: string; from?: string; to?: string; limit?: number }) => {
     const query = new URLSearchParams();
+    if (params?.search) query.append('search', params.search);
     if (params?.from) query.append('from', params.from);
     if (params?.to) query.append('to', params.to);
     if (params?.limit) query.append('limit', String(params.limit));
@@ -318,9 +321,14 @@ export const api = {
       `/reports/absenteeism?${query.toString()}`
     );
   },
-  getRosterReport: (date?: string) => {
+  getRosterReport: (params?: { date?: string; search?: string } | string) => {
     const query = new URLSearchParams();
-    if (date) query.append('date', date);
+    if (typeof params === 'string') {
+      if (params) query.append('date', params);
+    } else if (params) {
+      if (params.date) query.append('date', params.date);
+      if (params.search) query.append('search', params.search);
+    }
     return request<DailyRosterReport>(`/reports/roster?${query.toString()}`);
   },
 };

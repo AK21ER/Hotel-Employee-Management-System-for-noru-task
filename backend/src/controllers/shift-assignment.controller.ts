@@ -24,8 +24,9 @@ export class ShiftAssignmentController {
 
   static async getAll(req: Request, res: Response, next: NextFunction) {
     try {
-      const { date, employeeId, departmentId, page, pageSize } = req.query;
+      const { search, date, employeeId, departmentId, page, pageSize } = req.query;
       const result = await ShiftAssignmentService.getAll({
+        search: search ? String(search) : undefined,
         date: date ? String(date) : undefined,
         employeeId: employeeId ? Number(employeeId) : undefined,
         departmentId: departmentId ? Number(departmentId) : undefined,

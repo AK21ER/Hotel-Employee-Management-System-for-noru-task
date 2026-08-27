@@ -27,6 +27,7 @@ import {
   User,
   Clock,
   CheckCircle2,
+  Search,
 } from 'lucide-react';
 
 export const ReportsPage: React.FC = () => {
@@ -43,6 +44,7 @@ export const ReportsPage: React.FC = () => {
   const [loadingRate, setLoadingRate] = useState(false);
 
   // 2. Absenteeism State
+  const [absenteeismSearch, setAbsenteeismSearch] = useState('');
   const [absenteeismFrom, setAbsenteeismFrom] = useState(() => {
     const d = new Date();
     d.setDate(d.getDate() - 30);
@@ -54,6 +56,7 @@ export const ReportsPage: React.FC = () => {
   const [loadingAbsenteeism, setLoadingAbsenteeism] = useState(false);
 
   // 3. Daily Roster State
+  const [rosterSearch, setRosterSearch] = useState('');
   const [rosterDate, setRosterDate] = useState(new Date().toISOString().split('T')[0]);
   const [rosterData, setRosterData] = useState<DailyRosterReport | null>(null);
   const [loadingRoster, setLoadingRoster] = useState(false);
@@ -83,6 +86,7 @@ export const ReportsPage: React.FC = () => {
     try {
       setLoadingAbsenteeism(true);
       const res = await api.getAbsenteeismReport({
+        search: absenteeismSearch.trim() || undefined,
         from: absenteeismFrom,
         to: absenteeismTo,
         limit: absenteeismLimit,
@@ -99,7 +103,10 @@ export const ReportsPage: React.FC = () => {
   const fetchRosterReport = async () => {
     try {
       setLoadingRoster(true);
-      const res = await api.getRosterReport(rosterDate);
+      const res = await api.getRosterReport({
+        date: rosterDate,
+        search: rosterSearch.trim() || undefined,
+      });
       setRosterData(res);
     } catch (err) {
       console.error(err);
@@ -112,7 +119,17 @@ export const ReportsPage: React.FC = () => {
     if (activeReportTab === 'rate') fetchRateReport();
     if (activeReportTab === 'absenteeism') fetchAbsenteeismReport();
     if (activeReportTab === 'roster') fetchRosterReport();
-  }, [activeReportTab, selectedMonth, selectedDept, absenteeismFrom, absenteeismTo, absenteeismLimit, rosterDate]);
+  }, [
+    activeReportTab,
+    selectedMonth,
+    selectedDept,
+    absenteeismSearch,
+    absenteeismFrom,
+    absenteeismTo,
+    absenteeismLimit,
+    rosterDate,
+    rosterSearch,
+  ]);
 
   return (
     <div className="space-y-6">
@@ -294,7 +311,20 @@ export const ReportsPage: React.FC = () => {
       {activeReportTab === 'absenteeism' && (
         <div className="space-y-6">
           {/* Controls */}
-          <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Search Staff</label>
+              <div className="relative">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter name or email..."
+                  value={absenteeismSearch}
+                  onChange={(e) => setAbsenteeismSearch(e.target.value)}
+                  className="w-full pl-9 pr-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+                />
+              </div>
+            </div>
             <div>
               <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">From Date</label>
               <input
@@ -413,21 +443,34 @@ export const ReportsPage: React.FC = () => {
       {activeReportTab === 'roster' && (
         <div className="space-y-6">
           {/* Controls */}
-          <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm flex items-center justify-between">
+          <div className="bg-white p-4 rounded-2xl border border-[#ecdcb7]/80 shadow-sm grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
             <div className="flex items-center space-x-3">
               <Calendar className="w-5 h-5 text-[#c29b38]" />
-              <div>
+              <div className="w-full">
                 <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Roster Date</label>
                 <input
                   type="date"
                   value={rosterDate}
                   onChange={(e) => setRosterDate(e.target.value)}
-                  className="px-3 py-1.5 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+                  className="w-full px-3 py-1.5 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-[11px] font-semibold text-slate-500 uppercase tracking-wider">Search Staff in Roster</label>
+              <div className="relative mt-0.5">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  placeholder="Filter name or email..."
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  className="w-full pl-9 pr-3 py-1.5 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
                 />
               </div>
             </div>
             {rosterData && (
-              <div className="text-xs font-semibold text-[#876420] bg-[#f9f5ea] border border-[#ecdcb7] px-3.5 py-1.5 rounded-xl">
+              <div className="text-xs font-semibold text-[#876420] bg-[#f9f5ea] border border-[#ecdcb7] px-3.5 py-2.5 rounded-xl md:justify-self-end">
                 Total Scheduled: <span className="text-[#1d140d] font-bold">{rosterData.totalAssignments} staff</span>
               </div>
             )}

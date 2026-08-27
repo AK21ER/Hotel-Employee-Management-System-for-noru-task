@@ -131,8 +131,9 @@ export class ReportService {
    * Absenteeism report:
    * Ranked employees by count of ABSENT + LATE records in date range descending.
    * Explicitly excludes ON_LEAVE since planned leaves are not infractions.
+   * Supports employee name/email filtering via search parameter.
    */
-  static async getAbsenteeismReport(params: { from?: string; to?: string; limit?: number }) {
+  static async getAbsenteeismReport(params: { from?: string; to?: string; limit?: number; search?: string }) {
     const limit = Math.max(1, Math.min(100, params.limit || 10));
 
     let startDate: Date;
@@ -154,6 +155,19 @@ export class ReportService {
       endDate = new Date();
     }
 
+    const employeeFilter: any = {
+      status: 'ACTIVE',
+    };
+
+    if (params.search && params.search.trim()) {
+      const query = params.search.trim();
+      employeeFilter.OR = [
+        { firstName: { contains: query, mode: 'insensitive' } },
+        { lastName: { contains: query, mode: 'insensitive' } },
+        { email: { contains: query, mode: 'insensitive' } },
+      ];
+    }
+
     // Find all attendance records with ABSENT or LATE only in the range
     const attendanceRecords = await prisma.attendance.findMany({
       where: {
@@ -164,9 +178,7 @@ export class ReportService {
         status: {
           in: ['ABSENT', 'LATE'], // Excludes ON_LEAVE
         },
-        employee: {
-          status: 'ACTIVE',
-        },
+        employee: employeeFilter,
       },
       select: {
         id: true,
@@ -243,14 +255,28 @@ export class ReportService {
   /**
    * Daily Roster report:
    * All ShiftAssignments for a given date, grouped by Department then Shift, showing employee name and role.
+   * Supports employee name/email filtering.
    */
-  static async getRosterReport(dateStr?: string) {
+  static async getRosterReport(dateStr?: string, search?: string) {
     const targetDate = dateStr ? toDateOnly(dateStr) : toDateOnly(new Date());
 
+    const where: any = {
+      date: targetDate,
+    };
+
+    if (search && search.trim()) {
+      const query = search.trim();
+      where.employee = {
+        OR: [
+          { firstName: { contains: query, mode: 'insensitive' } },
+          { lastName: { contains: query, mode: 'insensitive' } },
+          { email: { contains: query, mode: 'insensitive' } },
+        ],
+      };
+    }
+
     const assignments = await prisma.shiftAssignment.findMany({
-      where: {
-        date: targetDate,
-      },
+      where,
       select: {
         id: true,
         shift: {
