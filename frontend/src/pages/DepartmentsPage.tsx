@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Department } from '../api/client';
+import { toast } from '../context/ToastContext';
 import { Modal } from '../components/Modal';
 import { Building2, Plus, Edit2, Trash2, Users, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -48,10 +49,14 @@ export const DepartmentsPage: React.FC = () => {
     try {
       if (editingDept) {
         await api.updateDepartment(editingDept.id, formData);
-        setSuccessMsg(`Department "${formData.name}" updated successfully.`);
+        const msg = `Department "${formData.name}" updated successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Department Updated');
       } else {
         await api.createDepartment(formData);
-        setSuccessMsg(`Department "${formData.name}" created successfully.`);
+        const msg = `Department "${formData.name}" created successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Department Created');
       }
       setIsModalOpen(false);
       fetchDepartments();
@@ -65,7 +70,9 @@ export const DepartmentsPage: React.FC = () => {
     if (!window.confirm(`Are you sure you want to delete department "${dept.name}"?`)) return;
     try {
       await api.deleteDepartment(dept.id);
-      setSuccessMsg(`Department "${dept.name}" deleted.`);
+      const msg = `Department "${dept.name}" deleted.`;
+      setSuccessMsg(msg);
+      toast.warning(msg, 'Department Deleted');
       fetchDepartments();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Employee, Department, Role } from '../api/client';
+import { toast } from '../context/ToastContext';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
@@ -127,14 +128,18 @@ export const EmployeesPage: React.FC = () => {
           departmentId: Number(formData.departmentId),
           roleId: Number(formData.roleId),
         });
-        setSuccessMsg(`Employee ${formData.firstName} ${formData.lastName} updated successfully.`);
+        const msg = `Employee ${formData.firstName} ${formData.lastName} updated successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Employee Updated');
       } else {
         await api.createEmployee({
           ...formData,
           departmentId: Number(formData.departmentId),
           roleId: Number(formData.roleId),
         });
-        setSuccessMsg(`Employee ${formData.firstName} ${formData.lastName} created successfully.`);
+        const msg = `Employee ${formData.firstName} ${formData.lastName} created successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Employee Created');
       }
       setIsModalOpen(false);
       fetchData();
@@ -148,7 +153,9 @@ export const EmployeesPage: React.FC = () => {
     if (!deletingEmployee) return;
     try {
       await api.deleteEmployee(deletingEmployee.id);
-      setSuccessMsg(`Employee ${deletingEmployee.firstName} ${deletingEmployee.lastName} has been soft-deleted (status: INACTIVE).`);
+      const msg = `Employee ${deletingEmployee.firstName} ${deletingEmployee.lastName} has been deactivated (status: INACTIVE).`;
+      setSuccessMsg(msg);
+      toast.warning(msg, 'Employee Deactivated');
       setIsDeleteModalOpen(false);
       setDeletingEmployee(null);
       fetchData();

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Attendance, Employee, Department } from '../api/client';
+import { toast } from '../context/ToastContext';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
@@ -115,7 +116,9 @@ export const AttendancePage: React.FC = () => {
         status: recordForm.explicitStatus || null,
       });
 
-      setSuccessMsg(`Attendance logged for ${res.data.employee.firstName} ${res.data.employee.lastName} with derived status: ${res.data.status}`);
+      const msg = `Attendance logged for ${res.data.employee.firstName} ${res.data.employee.lastName} (Status: ${res.data.status})`;
+      setSuccessMsg(msg);
+      toast.success(msg, 'Attendance Recorded');
       setIsModalOpen(false);
       fetchData();
       setTimeout(() => setSuccessMsg(null), 5000);

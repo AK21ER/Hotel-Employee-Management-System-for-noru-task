@@ -125,6 +125,8 @@ export interface DailyRosterReport {
   departments: DailyRosterDepartment[];
 }
 
+import { toast } from '../context/ToastContext';
+
 async function request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const url = `${BASE_URL}${endpoint}`;
   const headers = {
@@ -132,15 +134,28 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...(options.headers || {}),
   };
 
-  const response = await fetch(url, { ...options, headers });
-  const data = await response.json();
+  try {
+    const response = await fetch(url, { ...options, headers });
+    const data = await response.json();
 
-  if (!response.ok) {
-    const errorMessage = data.message || (data.details ? data.details.map((d: any) => `${d.field}: ${d.message}`).join(', ') : 'Something went wrong');
-    throw new Error(errorMessage);
+    if (!response.ok) {
+      const errorMessage =
+        data.message ||
+        (data.details ? data.details.map((d: any) => `${d.field}: ${d.message}`).join(', ') : 'Something went wrong');
+      toast.error(errorMessage);
+      throw new Error(errorMessage);
+    }
+
+    return data as T;
+  } catch (err: any) {
+    // If it's a network disconnection error or server down
+    if (err.name === 'TypeError' && err.message.includes('fetch')) {
+      const netError = 'Cannot connect to backend server. Please verify the API is running on port 5000.';
+      toast.error(netError, 'Network Connection Failed');
+      throw new Error(netError);
+    }
+    throw err;
   }
-
-  return data as T;
 }
 
 export const api = {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Role } from '../api/client';
+import { toast } from '../context/ToastContext';
 import { Modal } from '../components/Modal';
 import { Briefcase, Plus, Edit2, Trash2, Users, AlertCircle, CheckCircle2 } from 'lucide-react';
 
@@ -47,10 +48,14 @@ export const RolesPage: React.FC = () => {
     try {
       if (editingRole) {
         await api.updateRole(editingRole.id, formData);
-        setSuccessMsg(`Role "${formData.title}" updated successfully.`);
+        const msg = `Role "${formData.title}" updated successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Role Updated');
       } else {
         await api.createRole(formData);
-        setSuccessMsg(`Role "${formData.title}" created successfully.`);
+        const msg = `Role "${formData.title}" created successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Role Created');
       }
       setIsModalOpen(false);
       fetchRoles();
@@ -64,7 +69,9 @@ export const RolesPage: React.FC = () => {
     if (!window.confirm(`Are you sure you want to delete role "${role.title}"?`)) return;
     try {
       await api.deleteRole(role.id);
-      setSuccessMsg(`Role "${role.title}" deleted.`);
+      const msg = `Role "${role.title}" deleted.`;
+      setSuccessMsg(msg);
+      toast.warning(msg, 'Role Deleted');
       fetchRoles();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {

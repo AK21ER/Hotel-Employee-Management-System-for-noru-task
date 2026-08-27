@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { api, Shift, ShiftAssignment, Employee, Department } from '../api/client';
+import { toast } from '../context/ToastContext';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
 import {
@@ -110,10 +111,14 @@ export const ShiftsPage: React.FC = () => {
     try {
       if (editingShift) {
         await api.updateShift(editingShift.id, shiftForm);
-        setSuccessMsg(`Shift "${shiftForm.name}" updated successfully.`);
+        const msg = `Shift "${shiftForm.name}" updated successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Shift Updated');
       } else {
         await api.createShift(shiftForm);
-        setSuccessMsg(`Shift "${shiftForm.name}" created successfully.`);
+        const msg = `Shift "${shiftForm.name}" created successfully.`;
+        setSuccessMsg(msg);
+        toast.success(msg, 'Shift Created');
       }
       setIsShiftModalOpen(false);
       fetchShifts();
@@ -127,7 +132,9 @@ export const ShiftsPage: React.FC = () => {
     if (!window.confirm(`Delete shift "${s.name}"?`)) return;
     try {
       await api.deleteShift(s.id);
-      setSuccessMsg(`Shift "${s.name}" deleted.`);
+      const msg = `Shift "${s.name}" deleted.`;
+      setSuccessMsg(msg);
+      toast.warning(msg, 'Shift Deleted');
       fetchShifts();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
@@ -144,7 +151,9 @@ export const ShiftsPage: React.FC = () => {
         shiftId: Number(assignForm.shiftId),
         date: assignForm.date,
       });
-      setSuccessMsg(`Shift assigned successfully for date ${assignForm.date}.`);
+      const msg = `Shift assigned successfully for date ${assignForm.date}.`;
+      setSuccessMsg(msg);
+      toast.success(msg, 'Shift Scheduled');
       setIsAssignModalOpen(false);
       fetchAssignments();
       setTimeout(() => setSuccessMsg(null), 4000);
@@ -157,7 +166,9 @@ export const ShiftsPage: React.FC = () => {
     if (!window.confirm('Remove this shift assignment?')) return;
     try {
       await api.deleteShiftAssignment(id);
-      setSuccessMsg('Assignment removed.');
+      const msg = 'Shift assignment removed.';
+      setSuccessMsg(msg);
+      toast.info(msg, 'Assignment Removed');
       fetchAssignments();
       setTimeout(() => setSuccessMsg(null), 4000);
     } catch (err: any) {
