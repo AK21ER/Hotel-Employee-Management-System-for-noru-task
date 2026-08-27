@@ -1,24 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { api, Employee, Department, Role } from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { toast } from '../context/ToastContext';
 import { Badge } from '../components/Badge';
 import { Modal } from '../components/Modal';
 import { Pagination } from '../components/Pagination';
 import {
+  Users,
   UserPlus,
-  Search,
   Edit2,
   UserX,
-  Phone,
-  Mail,
-  Calendar,
+  Search,
   Building2,
   Briefcase,
+  Calendar,
+  Mail,
+  Phone,
   AlertCircle,
   CheckCircle2,
 } from 'lucide-react';
 
 export const EmployeesPage: React.FC = () => {
+  const { user, isManager } = useAuth();
   const [employees, setEmployees] = useState<Employee[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [roles, setRoles] = useState<Role[]>([]);
@@ -28,20 +31,18 @@ export const EmployeesPage: React.FC = () => {
 
   // Filters & Pagination
   const [search, setSearch] = useState('');
-  const [deptFilter, setDeptFilter] = useState<number | undefined>();
-  const [roleFilter, setRoleFilter] = useState<number | undefined>();
-  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [departmentId, setDepartmentId] = useState<number | undefined>(() => {
+    return isManager ? (user?.departmentId || user?.employee?.departmentId || undefined) : undefined;
+  });
+  const [roleId, setRoleId] = useState<number | undefined>();
+  const [status, setStatus] = useState<string>('ALL');
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [totalRecords, setTotalRecords] = useState(0);
 
-  // Modal states
+  // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
-  const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
-
-  // Form states
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -52,6 +53,28 @@ export const EmployeesPage: React.FC = () => {
     roleId: 0,
     status: 'ACTIVE' as 'ACTIVE' | 'INACTIVE',
   });
+
+  // Soft-delete modal state
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [deletingEmployee, setDeletingEmployee] = useState<Employee | null>(null);
+
+  const managerDeptId = user?.departmentId || user?.employee?.departmentId || 0;
+
+  const handleOpenAdd = () => {
+    setEditingEmployee(null);
+    const defaultDept = isManager ? managerDeptId : (departments[0]?.id || 0);
+    setFormData({
+      firstName: '',
+      lastName: '',
+      email: '',
+      phone: '',
+      hireDate: new Date().toISOString().split('T')[0],
+      departmentId: defaultDept,
+      roleId: roles[0]?.id || 0,
+      status: 'ACTIVE',
+    });
+    setIsModalOpen(true);
+  };
 
   const fetchData = async () => {
     try {
@@ -237,21 +260,28 @@ export const EmployeesPage: React.FC = () => {
         </div>
 
         {/* Department Filter */}
-        <select
-          value={deptFilter || ''}
-          onChange={(e) => {
-            setDeptFilter(e.target.value ? Number(e.target.value) : undefined);
-            setPage(1);
-          }}
-          className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38] transition"
-        >
-          <option value="">All Departments</option>
-          {departments.map((dept) => (
-            <option key={dept.id} value={dept.id}>
-              {dept.name}
-            </option>
-          ))}
-        </select>
+        {isManager ? (
+          <div className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm font-semibold text-stone-700 flex items-center justify-between">
+            <span className="truncate">{user?.employee?.department?.name || 'Your Department'}</span>
+            <span className="text-[10px] text-[#876420] font-bold bg-[#f9f5ea] px-2 py-0.5 rounded border border-[#ecdcb7]">Dept Scoped</span>
+          </div>
+        ) : (
+          <select
+            value={deptFilter || ''}
+            onChange={(e) => {
+              setDeptFilter(e.target.value ? Number(e.target.value) : undefined);
+              setPage(1);
+            }}
+            className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38] transition"
+          >
+            <option value="">All Departments</option>
+            {departments.map((dept) => (
+              <option key={dept.id} value={dept.id}>
+                {dept.name}
+              </option>
+            ))}
+          </select>
+        )}
 
         {/* Role Filter */}
         <select
@@ -467,17 +497,24 @@ export const EmployeesPage: React.FC = () => {
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                 Department *
               </label>
-              <select
-                required
-                value={formData.departmentId}
-                onChange={(e) => setFormData({ ...formData, departmentId: Number(e.target.value) })}
-                className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
-              >
-                <option value={0} disabled>Select Department</option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>{d.name}</option>
-                ))}
-              </select>
+              {isManager ? (
+                <div className="w-full px-3.5 py-2.5 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm font-bold text-stone-800 flex items-center justify-between">
+                  <span>{user?.employee?.department?.name || departments.find(d => d.id === formData.departmentId)?.name || 'Your Department'}</span>
+                  <span className="text-[10px] text-[#876420] font-semibold bg-[#f9f5ea] px-2 py-0.5 rounded border border-[#ecdcb7]">Your Dept</span>
+                </div>
+              ) : (
+                <select
+                  required
+                  value={formData.departmentId}
+                  onChange={(e) => setFormData({ ...formData, departmentId: Number(e.target.value) })}
+                  className="w-full px-3.5 py-2 bg-[#fdfbf7] border border-[#ecdcb7] rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-[#c29b38]/30 focus:border-[#c29b38]"
+                >
+                  <option value={0} disabled>Select Department</option>
+                  {departments.map((d) => (
+                    <option key={d.id} value={d.id}>{d.name}</option>
+                  ))}
+                </select>
+              )}
             </div>
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
