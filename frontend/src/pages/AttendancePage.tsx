@@ -42,11 +42,12 @@ export const AttendancePage: React.FC = () => {
 
   // Record Attendance Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [punchMode, setPunchMode] = useState<'CHECK_IN' | 'CHECK_OUT'>('CHECK_IN');
   const [recordForm, setRecordForm] = useState({
     employeeId: 0,
     date: new Date().toISOString().split('T')[0],
-    checkInTime: '07:15',
-    checkOutTime: '15:00',
+    checkInTime: new Date().toTimeString().slice(0, 5),
+    checkOutTime: new Date().toTimeString().slice(0, 5),
     includeCheckIn: true,
     includeCheckOut: false,
     explicitStatus: '',
@@ -100,14 +101,16 @@ export const AttendancePage: React.FC = () => {
     fetchData();
   }, [fromDate, toDate, deptFilter, statusFilter, search, page]);
 
-  const handleOpenRecord = () => {
+  const handleOpenRecord = (defaultMode: 'CHECK_IN' | 'CHECK_OUT' = 'CHECK_IN') => {
+    setPunchMode(defaultMode);
+    const nowTime = new Date().toTimeString().slice(0, 5);
     setRecordForm({
       employeeId: isStaff ? user?.employeeId || 0 : employees[0]?.id || 0,
       date: new Date().toISOString().split('T')[0],
-      checkInTime: new Date().toTimeString().slice(0, 5),
-      checkOutTime: '15:00',
-      includeCheckIn: true,
-      includeCheckOut: false,
+      checkInTime: nowTime,
+      checkOutTime: nowTime,
+      includeCheckIn: defaultMode === 'CHECK_IN',
+      includeCheckOut: defaultMode === 'CHECK_OUT',
       explicitStatus: '',
     });
     setIsModalOpen(true);
@@ -130,28 +133,33 @@ export const AttendancePage: React.FC = () => {
   const handleRecordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
+      const nowTime = new Date().toTimeString().slice(0, 5);
+      const activeCheckInTime = recordForm.checkInTime || nowTime;
+      const activeCheckOutTime = recordForm.checkOutTime || nowTime;
+
       let checkInIso: string | undefined = undefined;
       let checkOutIso: string | undefined = undefined;
 
-      if (recordForm.includeCheckIn && recordForm.checkInTime) {
-        checkInIso = `${recordForm.date}T${recordForm.checkInTime}:00`;
+      if (recordForm.includeCheckIn && activeCheckInTime) {
+        checkInIso = `${recordForm.date}T${activeCheckInTime}:00`;
       }
-      if (recordForm.includeCheckOut && recordForm.checkOutTime) {
-        checkOutIso = `${recordForm.date}T${recordForm.checkOutTime}:00`;
+      if (recordForm.includeCheckOut && activeCheckOutTime) {
+        checkOutIso = `${recordForm.date}T${activeCheckOutTime}:00`;
       }
 
       const targetEmpId = isStaff ? (user?.employeeId || 0) : Number(recordForm.employeeId);
 
-      if (isStaff && recordForm.includeCheckOut && !recordForm.includeCheckIn) {
-        // Staff Clock Out endpoint
+      if (punchMode === 'CHECK_OUT' || (recordForm.includeCheckOut && !recordForm.includeCheckIn)) {
+        // Clock Out Endpoint (PATCH /api/attendance/checkout)
         const res = await api.checkoutAttendance({
-          checkOut: checkOutIso,
+          employeeId: targetEmpId,
+          checkOut: checkOutIso || `${recordForm.date}T${nowTime}:00`,
         });
         const msg = `Clock-out recorded for ${res.data.employee.firstName} ${res.data.employee.lastName}`;
         setSuccessMsg(msg);
         toast.success(msg, 'Checked Out');
       } else {
-        // Standard Check-In endpoint
+        // Standard Check-In Endpoint (POST /api/attendance)
         const res = await api.recordAttendance({
           employeeId: targetEmpId,
           date: recordForm.date,
@@ -170,6 +178,7 @@ export const AttendancePage: React.FC = () => {
       setTimeout(() => setSuccessMsg(null), 5000);
     } catch (err: any) {
       setError(err.message);
+      toast.error(err.message, 'Attendance Action Failed');
     }
   };
 
@@ -233,13 +242,32 @@ export const AttendancePage: React.FC = () => {
               : 'Automated punctuality derivation, punch-in/out logs, and daily compliance.'}
           </p>
         </div>
-        <button
-          onClick={handleOpenRecord}
-          className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white text-sm font-bold rounded-xl shadow-md shadow-[#c29b38]/20 transition transform active:scale-95 self-start md:self-auto"
-        >
-          <Plus className="w-4 h-4" />
-          <span>{isStaff ? 'Punch In / Clock Out' : 'Log Attendance / Punch'}</span>
-        </button>
+        <div className="flex items-center space-x-2">
+          {isStaff ? (
+            <>
+              <button
+                onClick={() => handleOpenRecord('CHECK_IN')}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-md transition transform active:scale-95"
+              >
+                <span>🟢 Punch In</span>
+              </button>
+              <button
+                onClick={() => handleOpenRecord('CHECK_OUT')}
+                className="inline-flex items-center space-x-1.5 px-3.5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold rounded-xl shadow-md transition transform active:scale-95"
+              >
+                <span>🟠 Clock Out</span>
+              </button>
+            </>
+          ) : (
+            <button
+              onClick={() => handleOpenRecord('CHECK_IN')}
+              className="inline-flex items-center space-x-2 px-4 py-2.5 bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white text-sm font-bold rounded-xl shadow-md shadow-[#c29b38]/20 transition transform active:scale-95 self-start md:self-auto"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Log Attendance / Punch</span>
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Logic Callout Notice */}
@@ -475,9 +503,41 @@ export const AttendancePage: React.FC = () => {
       <Modal
         isOpen={isModalOpen}
         onClose={() => setIsModalOpen(false)}
-        title={isStaff ? 'Punch In / Out' : 'Record Staff Attendance'}
+        title={isStaff ? (punchMode === 'CHECK_IN' ? 'Punch In' : 'Clock Out') : 'Record Staff Attendance'}
       >
         <form onSubmit={handleRecordSubmit} className="space-y-4">
+          {/* Mode Switcher Tabs */}
+          <div className="grid grid-cols-2 p-1 bg-[#f4ebd9]/80 rounded-xl border border-[#ecdcb7] gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setPunchMode('CHECK_IN');
+                setRecordForm({ ...recordForm, includeCheckIn: true, includeCheckOut: false });
+              }}
+              className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
+                punchMode === 'CHECK_IN'
+                  ? 'bg-emerald-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>🟢 Check-In Punch</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPunchMode('CHECK_OUT');
+                setRecordForm({ ...recordForm, includeCheckIn: false, includeCheckOut: true });
+              }}
+              className={`py-2 px-3 rounded-lg text-xs font-bold transition flex items-center justify-center space-x-1.5 ${
+                punchMode === 'CHECK_OUT'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span>🟠 Clock-Out</span>
+            </button>
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
               Employee *
@@ -539,103 +599,45 @@ export const AttendancePage: React.FC = () => {
           {isStaff ? (
             <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3 text-center">
               <div className="text-[11px] font-bold uppercase tracking-wider text-[#876420]">
-                Live Time Clock
+                Live Time Clock ({punchMode === 'CHECK_IN' ? 'Check-In' : 'Clock-Out'})
               </div>
               <div className="text-2xl font-black font-mono text-[#1d140d] tracking-widest bg-white py-2 rounded-lg border border-[#ecdcb7]">
-                {recordForm.checkInTime || new Date().toTimeString().slice(0, 5)}
+                {new Date().toTimeString().slice(0, 5)}
               </div>
               <p className="text-[11px] text-slate-500">
                 Timestamp is automatically locked to the server/system clock upon punching.
               </p>
-              <div className="grid grid-cols-2 gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nowTime = new Date().toTimeString().slice(0, 5);
-                    setRecordForm({
-                      ...recordForm,
-                      includeCheckIn: true,
-                      includeCheckOut: false,
-                      checkInTime: nowTime,
-                    });
-                  }}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
-                    recordForm.includeCheckIn && !recordForm.includeCheckOut
-                      ? 'bg-emerald-600 text-white border-emerald-600 shadow'
-                      : 'bg-white text-slate-700 border-[#ecdcb7] hover:bg-emerald-50'
-                  }`}
-                >
-                  ✓ Punch Check-In
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    const nowTime = new Date().toTimeString().slice(0, 5);
-                    setRecordForm({
-                      ...recordForm,
-                      includeCheckIn: false,
-                      includeCheckOut: true,
-                      checkOutTime: nowTime,
-                    });
-                  }}
-                  className={`py-2 px-3 rounded-xl text-xs font-bold transition border ${
-                    recordForm.includeCheckOut
-                      ? 'bg-amber-600 text-white border-amber-600 shadow'
-                      : 'bg-white text-slate-700 border-[#ecdcb7] hover:bg-amber-50'
-                  }`}
-                >
-                  ⏰ Clock Out
-                </button>
-              </div>
             </div>
           ) : (
             <div className="p-4 bg-[#fdfbf7] rounded-xl border border-[#ecdcb7] space-y-3">
               <div className="text-[11px] font-bold uppercase tracking-wider text-slate-600">
-                Manual Punch Time Entry (Management)
+                Manual Time Entry ({punchMode === 'CHECK_IN' ? 'Check-In' : 'Clock-Out'})
               </div>
-              <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={recordForm.includeCheckIn}
-                    onChange={(e) => setRecordForm({ ...recordForm, includeCheckIn: e.target.checked })}
-                    className="rounded text-[#c29b38] focus:ring-[#c29b38]"
-                  />
-                  <span>Include Check-In Time</span>
-                </label>
-                {recordForm.includeCheckIn && (
+              {punchMode === 'CHECK_IN' ? (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-800">Check-In Timestamp</span>
                   <input
                     type="time"
                     value={recordForm.checkInTime}
                     onChange={(e) => setRecordForm({ ...recordForm, checkInTime: e.target.value })}
                     className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
                   />
-                )}
-              </div>
-
-              <div className="flex items-center justify-between">
-                <label className="flex items-center space-x-2 text-xs font-semibold text-slate-800 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={recordForm.includeCheckOut}
-                    onChange={(e) => setRecordForm({ ...recordForm, includeCheckOut: e.target.checked })}
-                    className="rounded text-[#c29b38] focus:ring-[#c29b38]"
-                  />
-                  <span>Include Check-Out Time</span>
-                </label>
-                {recordForm.includeCheckOut && (
+                </div>
+              ) : (
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-slate-800">Check-Out Timestamp</span>
                   <input
                     type="time"
                     value={recordForm.checkOutTime}
                     onChange={(e) => setRecordForm({ ...recordForm, checkOutTime: e.target.value })}
                     className="px-2.5 py-1 bg-white border border-[#ecdcb7] rounded-lg text-xs font-mono"
                   />
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 
-          {!isStaff && (
+          {!isStaff && punchMode === 'CHECK_IN' && (
             <div>
               <label className="block text-xs font-semibold text-slate-700 uppercase tracking-wider mb-1.5">
                 Explicit Status Override (Optional)
@@ -664,9 +666,13 @@ export const AttendancePage: React.FC = () => {
             </button>
             <button
               type="submit"
-              className="px-5 py-2 rounded-xl text-sm font-bold bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220] text-white shadow-md shadow-[#c29b38]/20 transition"
+              className={`px-5 py-2 rounded-xl text-sm font-bold text-white shadow-md transition ${
+                punchMode === 'CHECK_OUT'
+                  ? 'bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800'
+                  : 'bg-gradient-to-r from-[#c29b38] to-[#a9822a] hover:from-[#b89130] hover:to-[#967220]'
+              }`}
             >
-              Log Attendance
+              {punchMode === 'CHECK_OUT' ? 'Confirm Clock-Out' : 'Confirm Check-In'}
             </button>
           </div>
         </form>
