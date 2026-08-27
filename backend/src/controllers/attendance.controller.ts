@@ -44,6 +44,7 @@ export const recordAttendanceSchema = z
 
 export const checkoutAttendanceSchema = z.object({
   employeeId: z.number().int().positive().optional(),
+  date: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).optional(),
   checkOut: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2})?/)).optional().nullable(),
 });
 

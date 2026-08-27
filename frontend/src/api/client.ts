@@ -360,6 +360,7 @@ export const api = {
     }),
   checkoutAttendance: (data: {
     employeeId?: number;
+    date?: string;
     checkOut?: string | null;
   }) =>
     request<{ message: string; data: Attendance }>('/attendance/checkout', {
